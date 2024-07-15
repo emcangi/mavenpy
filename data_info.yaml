@@ -1,0 +1,36 @@
+URL:
+  LASP_SDC_PUBLIC: https://lasp.colorado.edu/maven/sdc/public/data
+  LASP_SDC_TEAM: https://lasp.colorado.edu/maven/sdc/team/data
+  SSL_SPRG: http://sprg.ssl.berkeley.edu/data/maven
+  PDS_PLASMA: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/
+  PDS_ATMOSPHERE: https://atmos.nmsu.edu/PDS/data/PDS4/MAVEN
+
+FILENAME:
+  # For SWIA, SWEA, SEP, EUV, STATIC, LPW
+  DEFAULT_PF: "mvn_{tla}_{level}_{var_name}_{yyyy}{mm}{dd}_v[0-9][0-9]_r[0-9][0-9].{format}"
+  # For IUVS, NGIMS, ACC
+  DEFAULT_ATM: mvn_{tla}_{level}_{var_name}_{yyyy}{mm}{dd}T{hh}{mm}{ss}_v[0-9][0-9]_r[0-9][0-9].{format}
+  # ROSE not included at this time.
+  RAW_PFP: "mvn_pfp_{data}_l0_{yyyy}{mm}{dd}_v[0-9][0-9][0-9].dat"
+  EPH:  "maven_spacecraft_{coord}_{yyyy}{mm}.sav"
+  MAG:
+    STS: "mvn_mag_{alt_level}_{yyyy}*{doy}{coord}{alt_res}_{yyyy}{mm}{dd}_v*_r*.{format}"
+    SAV: "mvn_mag_{level}_{coord}_{res}_{yyyy}{mm}{dd}.sav"
+
+  SWEA_SWI_REGID: "mvn_swia_regid_{yyyy}{mm}{dd}_v[0-9][0-9]_r[0-9][0-9].sav"
+
+SDC_DIR:
+  EPH: anc/spice/sav
+  SCI: data/sci
+  DEFAULT: '{level}/{yyyy}/{mm}'  # e.g. l1/2015/01
+  SUBDIR: '{level}/{subdir_1}/{yyyy}/{mm}'  # e.g. l2/limb/2019/01 for IUVS
+  SUBSUBDIR: '{level}/{subdir_1}/{subdir_2}/{yyyy}/{mm}'  # e.g. l3/pad/sav/2019/01 for SEP
+
+UNITS:
+  EUV:
+    epoch: UTC
+    time: UNX
+    flag: usability flag
+    maven_sun_distance: km
+    wavelength: nm
+    spectra: W/m2/nm

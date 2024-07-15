@@ -1,0 +1,22 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+python/
+# C extensions
+*.so
+# Do not preserve workspaces between users.
+*.sublime-workspace
+# pickle
+
+*.obj
+*.db
+source/data
+.DS_Store
+*.html
+tmp
+logs/
+*.egg-info
+.eggs/*
+
+misc/
+build/
