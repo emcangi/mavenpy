@@ -1041,11 +1041,11 @@ def sep_mso_look_dir(time_UTC, sensor_number, look_direction):
     # initialize 3D matrix to fill in:
     sep_mso = np.zeros(shape=(N, 3))
 
-    for idx, i in enumerate(ephemeris_time):
+    for i, et in enumerate(ephemeris_time):
         frame = "MAVEN_SEP{}".format(sensor_number)
 
         try:
-            m = spiceypy.pxform(frame, "MAVEN_MSO", i)
+            m = spiceypy.pxform(frame, "MAVEN_MSO", et)
         except spiceypy.utils.support_types.SpiceyError:
             sep_mso.append([np.nan, np.nan, np.nan])
             continue
