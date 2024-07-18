@@ -59,13 +59,10 @@ def process_data_dict(dataset_dict, conditional_array=None,
         if isinstance(data_i, np.ndarray) and conditional_array is not None:
             data_i_shape = data_i.shape
             data_i_dim = len(data_i_shape)
-            # print(dataset_name, data_i_shape, n_t)
             # input()
 
-            if data_i_dim == 2:
-                matching_data_i = data_i[condition_index, :]
-            elif data_i_dim == 1 and data_i_shape[0] == n_t:
-                matching_data_i = data_i[condition_index]
+            if n_t in data_i_shape:
+                matching_data_i = data_i[condition_index, ...]
             else:
                 matching_data_i = data_i
 
