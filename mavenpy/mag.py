@@ -64,10 +64,31 @@ def read(file_path, level="", ext="", coord="", res="",
     '''
 
     # Retrieve ext from the filename if not provided:
-    if not ext:
+    if not ((ext and coord) and (res and level)):
         filename = os.path.split(file_path)[1]
-        ext = filename[-3:]
-        level = filename.split("_")[2]
+        if not ext:
+            ext = filename[-3:]
+
+        # Level is always second element regardless of filename convention
+        if not level:
+            level = (filename.split("_"))[2]
+
+        # Check for resolution
+        if not res:
+            # If else tree:
+            if "30s" in filename:
+                res = "30sec"
+            elif "1s" in filename:
+                res = "1sec"
+            else:
+                res = "full"
+        if not coord:
+            if "pl" in filename:
+                coord = "pl"
+            elif "ss" in filename or "mso" in filename:
+                coord = "mso"
+            elif "pc" in filename or "geo" in filename:
+                coord = "geo"
 
     if verbose:
         print("Reading MAG level {level} data with "
@@ -77,6 +98,7 @@ def read(file_path, level="", ext="", coord="", res="",
 
     # read the data with the appropriate read/parse
     # based on extension:
+    # print(ext, coord, level, res)
     if ext == "cdf":
         b_struc = parse_b_cdf(read_b_cdf(file_path))
     elif ext == "sts":
