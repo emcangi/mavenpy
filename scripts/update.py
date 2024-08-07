@@ -106,18 +106,9 @@ if __name__ == "__main__":
     # If download, set up the username / password:
     username = ""
     password = ""
-    if not args.username:
-        six_months_ago = dt.datetime.now() - relativedelta(months=6)
-        if start_utc > six_months_ago and args.remote == "ssl_sprg":
-            raise NameError(
-                "Need username to download newer than 6 months.")
-    else:
-        if args.remote == "ssl_sprg":
-            username = args.username
-            password = "{}_pfp".format(username)
-        elif args.remote == "lasp_sdc_team":
-            raise Exception(
-                "LASP SDC requires Oauth, not currently implemented.")
+    if args.username and args.remote == "ssl_sprg":
+        username = args.username
+        password = "{}_pfp".format(username)
 
     remote_info =\
         {"source": args.remote, "username": username,
