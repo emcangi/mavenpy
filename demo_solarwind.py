@@ -67,7 +67,7 @@ if __name__ == "__main__":
     k = spice.load_kernels(
         data_directory,
         start_date=start_date, end_date=end_date,
-        download_if_not_available=False,
+        download_if_not_available=args.download,
         verbose=True)
     print("Loaded kernels.")
 
