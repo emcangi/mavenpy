@@ -281,10 +281,6 @@ def find_local_files(local_dir, kernel_group, kernel_name,
         # Modify the local dir with the spice location per SPEDAS
         local_dir = os.path.join(local_dir, "misc", "spice", "naif")
 
-        # If doesn't exist, exit! There are no local files to find!
-        if not os.path.exists(local_dir):
-            return {}
-
     # Location of kernels
     # Determine local directory where spice kernels are.
     # This is based on where the SPEDAS distribution puts them
@@ -308,16 +304,6 @@ def find_local_files(local_dir, kernel_group, kernel_name,
 
     # Get list of local files present in the directory:
 
-    # If doesn't exist, exit! There are no local files to find!
-    if not os.path.exists(local_dir_i):
-        print(local_dir_i, "does not exist")
-        return []
-
-    # Get a list of all the files to search:
-    local_files_i = os.listdir(local_dir_i)
-    # print(local_files_i)
-    # input()
-
     # Get the file format
     files_fmt = all_file_fmts[kernel_group][kernel_name]
     # print(files_fmt)
@@ -330,7 +316,8 @@ def find_local_files(local_dir, kernel_group, kernel_name,
 
             files_fmt_i_all = []
             for spk_ext_i in spk_ext:
-                files_fmt_i = spk_file_names(start_dt, end_dt, files_fmt, spk_ext_i)
+                files_fmt_i = spk_file_names(
+                    start_dt, end_dt, files_fmt, spk_ext_i)
                 files_fmt_i_all += files_fmt_i
             files_fmt_i = files_fmt_i_all
 
@@ -352,10 +339,30 @@ def find_local_files(local_dir, kernel_group, kernel_name,
         files_fmt_i = files_fmt
         version_format = None
 
+    # If doesn't exist, exit! There are no local files to find!
+    # However, do need to provide the searched for file format,
+    # subpath, and local dir saved to in order to download spice
+    # kernels.
+    if not os.path.exists(local_dir_i):
+        print(local_dir_i, "does not exist")
+        local_info_i =\
+            {"fmt": files_fmt_i, "path": ['', ],
+             "filenames": ['', ], "remote_subdir": subpath,
+             "local_dir": local_dir_i}
+        # print(files_fmt_i)
+        # return []
+        return local_info_i
+
     # print(files_fmt_i)
     # input()
 
     # Find local files:
+
+    # Get a list of all the files to search:
+    local_files_i = os.listdir(local_dir_i)
+    # print(local_files_i)
+    # input()
+
     local_files = []
     local_paths = []
 
