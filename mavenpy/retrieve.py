@@ -617,6 +617,11 @@ def download_file(file_url, local_filename, session=None,
     else:
         req = session
 
+    # Check if directory exist, make if not:
+    containing_dir, filename = os.path.split(local_filename)
+    if not os.path.exists(containing_dir):
+        os.makedirs(containing_dir)
+
     # Check if file present on remote, exit if not found:
     response = req.head(file_url)
     if response.status_code != 200:
