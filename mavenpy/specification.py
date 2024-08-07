@@ -389,8 +389,6 @@ def filename(instrument_tla, level="2", dataset_name=None, ext=None,
     elif instrument_tla == "sta" and "iv" in level:
         data_name = sta_iv_name.format(
             dataset_name=dataset_name, iv_num=level)
-        print(data_name)
-        input()
 
     elif instrument_tla in file_per_orbit:
         data_name = hourly_name.format(
