@@ -121,13 +121,14 @@ def sdc_retrieve(instrument, destination_dir='',
 
     # if dataset requested is only a string and not none,
     # make into tuple:
-    if isinstance(dataset_name, str) and dataset_name:
+    if isinstance(dataset_name, str):
         dataset_name = (dataset_name,)
 
     # Iterate through dataset names to get unique
     # paths to batch datasets saved in same dir:
     unique_file_paths = {}
     for d_name in dataset_name:
+        # print(d_name, ",")
         # See if the requested dataset exists
         specification.check_if_dataset_exist(
             instrument, level=level, ext=ext,
@@ -155,7 +156,6 @@ def sdc_retrieve(instrument, destination_dir='',
             unique_file_paths[filedir_tuple].append(filename_regex)
         else:
             unique_file_paths[filedir_tuple] = [filename_regex]
-
     # print(unique_file_paths)
     # input()
 
