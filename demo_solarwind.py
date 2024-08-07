@@ -128,13 +128,14 @@ if __name__ == "__main__":
         retrieve.sdc_retrieve(
             'sep', destination_dir=data_directory,
             username=username, password=password,
-            dataset_name='s1-svy-full', ext='cdf',
+            dataset_name='s1-cal-svy-full', ext='cdf',
             start_date=start_date, end_date=end_date)
-        print("SEP filed updated.")
+        print("SEP files updated.")
     sep_1_file_names = file_path.local_file_names(
         data_directory, 'sep', start_date=start_date,
         end_date=end_date, dataset_name='s1-cal-svy-full',
         ext='cdf', source='ssl_sprg')
+    print(sep_1_file_names)
     sep_1_calib = load.load_data(
         sep_1_file_names, include_unit=True, label_by_detector=False)
 
