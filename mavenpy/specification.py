@@ -1,4 +1,8 @@
 import re
+import datetime as dt
+
+from dateutil.relativedelta import relativedelta
+
 from . import helper
 
 
@@ -386,7 +390,8 @@ def filename(instrument_tla, level="2", dataset_name=None, ext=None,
 
 
 def check_if_dataset_on_remote(instrument, source, auth_present=False,
-                               level='', ext='', dataset=''):
+                               level='', ext='', dataset='',
+                               start_utc=''):
 
     '''Inspects if a instrument dataset is available on a given
     remote, and if not, provides an error with the remotes it
@@ -395,14 +400,25 @@ def check_if_dataset_on_remote(instrument, source, auth_present=False,
     instrument: string, name of instrument
     source: string, name of remote to be downloaded from, e.g. 'ssl_sprg'
     auth_present: Boolean, True if username/password provided
+    start_utc: Date time of the beginning of the data to download,
+        required if looking up data on SSL_SPRG
     '''
 
     # First, make sure have credentials if accessing ssl sprg or
     # lasp sdc team:
-    if (source == "ssl_sprg" or source == "lasp_sdc_team") and not auth_present:
-        raise TypeError(
-            "Missing authentication information (username and password)"
-            ", which is required for ssl_sprg or lasp_sdc_team access.")
+    if not auth_present:
+
+        if source == "lasp_sdc_team":
+            raise TypeError(
+                "Unable to access LASP SDC team website"
+                " at this time since requires OAuth.")
+
+        if source == "ssl_sprg":
+            six_months_ago = dt.datetime.now() - relativedelta(months=6)
+            if start_utc > six_months_ago:
+                raise TypeError(
+                    "Require authentication information (username and password)"
+                    " for data on ssl_sprg within 6 months.")
 
     # Get the TLA for the instrument:
     tla = instrument[:3].lower()

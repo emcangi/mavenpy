@@ -138,7 +138,7 @@ def sdc_retrieve(instrument, destination_dir='',
         specification.check_if_dataset_on_remote(
             tla, source, auth_present=(username != ''),
             level=level, dataset=d_name,
-            ext=ext)
+            ext=ext, start_utc=start_date)
 
         # Get path and filename:
         filedir_tuple = specification.path(
