@@ -134,17 +134,28 @@ formats["sep"]["source"] =\
 
 # STATIC
 formats["sta"] = {}
-formats["sta"]["level"] = ("l2", "l3")
-formats["sta"]["ext"] = {"l2": "cdf", "l3": ("sav", "tplot")}
+formats["sta"]["level"] = ("l2", "l3", "iv1", "iv2", "iv3", "iv4")
+formats["sta"]["ext"] =\
+    {"l2": "cdf", "l3": ("sav", "tplot"),
+     "iv1": "cdf", "iv2": "cdf", "iv3": "cdf", "iv4": "cdf"}
+sta_appids =\
+    ("2a-hkp", "c0-64e2m", "c6-32e64m", "c8-32e16d",
+     "ca-16e4d16a", "d0-32e4d16a8m", "d1-32e4d16a8m",
+     "d4-4d16a2m", "d6-events", "d7-fsthkp",
+     "d8-12r1e", "d9-12r64e", "da-1r64e", "db-1024tof")
+sta_calib_ids = ("c0-64e2m", "c6-32e64m", "c8-32e16d",
+                 "ca-16e4d16a", "d0-32e4d16a8m", "d1-32e4d16a8m",)
+
 formats["sta"]["datasets"] =\
-    {"l2": ("2a-hkp", "c0-64e2m", "c6-32e64m", "c8-32e16d",
-            "ca-16e4d16a", "d0-32e4d16a8m", "d1-32e4d16a8m",
-            "d4-4d16a2m", "d6-events", "d7-fsthkp",
-            "d8-12r1e", "d9-12r64e", "da-1r64e", "db-1024tof"),
+    {"l2": sta_appids,
+     "iv1": sta_calib_ids, "iv2": sta_calib_ids,
+     "iv3": sta_calib_ids, "iv4": sta_calib_ids,
      "l3": ("density", "temperature")}
 formats["sta"]["source"] =\
     {"l3": "ssl_sprg",
-     "l2": ("ssl_sprg", "lasp_sdc_team", "lasp_sdc_public")}
+     "l2": ("ssl_sprg", "lasp_sdc_team", "lasp_sdc_public"),
+     "iv1": "ssl_sprg", "iv2": "ssl_sprg",
+     "iv3": "ssl_sprg", "iv4": "ssl_sprg"}
 
 # SWEA
 formats["swe"] = {}
@@ -221,6 +232,7 @@ swea_swi_regid_name = "mvn_swia_regid_{{yyyy}}{{mm}}{{dd}}_"\
 # versioned after 2023/01 (mvn_sep_l1_20230630_v006.sav)
 # sep_l1_name = "mvn_sep_l1_{yyyy}{mm}{dd}_*.sav"
 sep_l1_name = "mvn_sep_l1_{yyyy}{mm}{dd}_(.*).sav"
+sta_iv_name = 'mvn_sta_l2_{dataset_name}_{{yyyy}}{{mm}}{{dd}}_{iv_num}.cdf'
 
 
 def during_safemode(time):
@@ -374,6 +386,11 @@ def filename(instrument_tla, level="2", dataset_name=None, ext=None,
         data_name = raw_pfp_name.format(data=dataset_name)
     elif instrument_tla == "sep" and level == 'l1':
         data_name = sep_l1_name
+    elif instrument_tla == "sta" and "iv" in level:
+        data_name = sta_iv_name.format(
+            dataset_name=dataset_name, iv_num=level)
+        print(data_name)
+        input()
 
     elif instrument_tla in file_per_orbit:
         data_name = hourly_name.format(
