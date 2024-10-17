@@ -58,8 +58,6 @@ def load_data(maven_data_files, data_read_function=None,
 
     # Retrieve the names of all contained datasets, particulary the time axis.
     data_names = [i for i in data_struct.keys()]
-    # print(data_names)
-    time_axis = [d for d in data_names if "time" in d or "epoch" in d][0]
 
     # Get the length of the time axis, which'll be used to identify timevarying
     # data names.
@@ -70,9 +68,21 @@ def load_data(maven_data_files, data_read_function=None,
             units[d] = unit_i
             data_struct[d] = data_day_i
 
-    time_arr = data_struct[time_axis]
-    n_time_0 = len(time_arr)
+    # print(data_names)
+    # Get the time varying axis:
+    time_axis = [i for i in data_names if "epoch" in i]
+    if len(time_axis) == 0:
+        time_axis = [d for d in data_names if "time" in d]
+        if len(time_axis) == 0:
+            raise IOError("No time axis identified to concatenate, aborting.")
+
+    # For all time-varying axes, get the lengths:
+    n_time_0 = [len(data_struct[time_axis]) for time_axis in time_axis]
     # print(n_time_0)
+    n_time_0, time_ax_index = np.unique(n_time_0, return_index=True)
+    time_axis = [time_axis[i] for i in time_ax_index]
+    # print(n_time_0, time_axis)
+    # input()
 
     # Find all data with time varying axes, as these will be concatenated
     # for multiple days
@@ -86,8 +96,9 @@ def load_data(maven_data_files, data_read_function=None,
         # try:
         data_i_d_dim = data_day_i.shape
         # print(data_i_d_dim)
-        if n_time_0 in data_i_d_dim:
-            iterate_names.append(d)
+        for n_time_i in n_time_0:
+            if n_time_i in data_i_d_dim:
+                iterate_names.append(d)
         # except AttributeError:
         #     continue
 
@@ -101,11 +112,12 @@ def load_data(maven_data_files, data_read_function=None,
             maven_data_files[i], include_unit=False, **kwargs)
 
         # Count the elements of the time axis for time-axis identification
-        n_time_i = len(maven_data_day_i[time_axis])
+        n_time_i = [len(maven_data_day_i[t]) for t in time_axis]
 
         # Iterate over all the time-varying data for concatenation
         for d in iterate_names:
             # print(d)
+            # print(n_time_i)
             # print(maven_data_day_i[d][:10])
             # print(type(maven_data_day_i[d]))
 
@@ -119,13 +131,22 @@ def load_data(maven_data_files, data_read_function=None,
             # print(data_i_d_dim)
 
             # t_index = np.where(np.array(data_i_d_dim) == n_time_i)[0][0]
-            t_index = data_i_d_dim.index(n_time_i)
+            for n_i in n_time_i:
+                # print(data_i_d_dim)
+                if n_i in data_i_d_dim:
+                    t_index = data_i_d_dim.index(n_i)
             # print(t_index)
 
             # Append the days data to the full structure along the timevarying
             # axis and return with the unit.
             new_data_i_d = np.append(data_struct[d], data_day_i, axis=t_index)
             data_struct[d] = new_data_i_d
+
+
+    # print("Load compelte:")
+    # for n in data_struct:
+    #     print(i, n, data_struct[n].shape)
+    # input()
 
     # Reapply unit
     # print(include_unit)
