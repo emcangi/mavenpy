@@ -4,12 +4,12 @@ import numpy as np
 
 # Calibration info:
 # The detector pattern referenced in Level 2 files:
-l2_coincidence_groupings = ["X", "O", "T", "OT", "F", "FO", "FT", "FTO", "Mixed"]
-n_pattern = len(l2_coincidence_groupings)
-telescope = ["A", "B"]
-n_telescope = len(telescope)
-geom = np.array([0.18, 0.0018])
+cal_detector_coincidence =\
+     ("X", "O", "T", "OT", "F", "FO", "FT", "FTO", "Mixed")
+cal_telescope = ("A", "B")
+geom = (0.18, 0.0018)
 efficiency = 1.
+
 
 # The height of the shaped pulse output from
 # the ADC is directly proportional to the deposited energy.
@@ -94,8 +94,8 @@ def norm_flux_factor(sensor_num, look_direction, particle_name, mapnum=9):
     detector = particle_to_dp[particle_name]
 
     # Get the telescope name:
-    telescope =\
-        p_ld_to_telescope["{}_{}".format(particle_name, look_direction)]
+    p_ld = "{}_{}".format(particle_name, look_direction)
+    telescope = p_ld_to_telescope[p_ld]
 
     # Energy per ADC for sensor/telescope/detector
     keV_per_adc_i = keV_in_adc["{}{}".format(sensor_num, telescope)][detector]
@@ -173,7 +173,10 @@ def map_to_bins(binname, output='map_array', mapnum=9,
     # If retrieving the ADC, same for each detector,
     # so only need to iterate over one.
     if binname == "ADC":
-        sensors = ("1",)
+        sensors = "1"
+
+    if isinstance(sensors, str):
+        sensors = (sensors,)
 
     # ADC info
     bin_dict = {}
@@ -234,6 +237,10 @@ def map_to_bins(binname, output='map_array', mapnum=9,
             nrg_meas_avg_i = 59.5/keV_per_adc_i * adc_avg_i
             nrg_meas_delta_i = 59.5/keV_per_adc_i * BW_i
 
+            # print(s, t, dp, i, f)
+            # print(nrg_meas_avg_i)
+            # input()
+
             # Identify where ADC > 4096
             # can cause overflow, so energy bin corrected accordingly.
             overflow = np.where(adc_high_i >= 4096)[0]
@@ -245,6 +252,9 @@ def map_to_bins(binname, output='map_array', mapnum=9,
                 overflow_fudge = 0.3
                 nrg_meas_delta_i[overflow] = nrg_meas_avg_i[overflow] * overflow_fudge
                 nrg_meas_avg_i[overflow] += nrg_meas_delta_i[overflow] / 2
+
+            # print(nrg_meas_avg_i)
+            # input()
 
         # Write the ADC or energy bins to array
 
@@ -263,7 +273,7 @@ def map_to_bins(binname, output='map_array', mapnum=9,
                 bin_dict[label_i.format("denergy")] = nrg_meas_delta_i
 
         elif output == "map_array":
-            bin_dict["MAP_FTO"][i:f] = l2_coincidence_groupings.index(dp)
+            bin_dict["MAP_FTO"][i:f] = cal_detector_coincidence.index(dp)
             bin_dict["MAP_TID"][i:f] = t_id
 
             if binname == "ADC":
@@ -317,40 +327,166 @@ def map_data_to_dict(data, telescopes, detector_pattern, data_name,
     return counts
 
 
-def raw_to_calibrated(raw_data_dict, mapid=9, look_directions=("F", "R"),
-                      particle=("elec", "ion"), unit="rates"):
+def raw_to_fto(raw_data, mapid=9,
+               level=None, sensors=None,
+               telescope=("A", "B"), detector='all',
+               raw_data_unit='counts',
+               output_data=("counts", "rate", "flux"),
+               include_unit=True):
+
+    if not isinstance(raw_data, dict):
+        raise IOError("Raw data must be a dictionary.")
+
+    if not level:
+        if "cfactor" in raw_data:
+            level = 'l1'
+        else:
+            level = 'l2'
+
+    # Get the var names:
+    if level == "l1":
+        counts_var_name = "data"
+        att_var_name = "att"
+        dt_var_name = "delta_time"
+
+    elif level == 'l2':
+        counts_var_name = "raw_counts"
+        att_var_name = "attenuator_state"
+        dt_var_name = "accum_time"    # N accumulations per s
+
+    # Map information: 256 bins
+    e_unit = 'keV'
+
+    # map_keys = [i for i in raw_data if "MAP" in i]
+    # print(map_keys)
+    # map_dict_1 = {m: raw_data[m] for m in map_keys}
+    # # for m in map_dict:
+    # #     print(m, map_dict[m])
+    # print(sensors)
+
+    map_dict = map_to_bins(
+        "energy", output='map_array', mapnum=mapid,
+        sensors=sensors)
+    # for m in map_dict:
+    #     # print(m)
+    #     if "NRG" in m:
+    #         print(m)
+    #         print(map_dict[m] - map_dict_1[m])
+    # input()
+
+    edeposit = map_dict["MAP_NRG_MEAS_AVG"]
+    ebinwidth = map_dict["MAP_NRG_MEAS_DELTA"]
+    detector_pattern_num = map_dict["MAP_FTO"]
+    telescope_num = map_dict["MAP_TID"]
+
+    # Retrieve the counts / duration / attenuator
+    counts = raw_data[counts_var_name]
+    duration = raw_data[dt_var_name]
+    att = raw_data[att_var_name]
+
+    if isinstance(output_data, str):
+        output_data = (output_data,)
+
+    output = {}
+    for output_i in output_data:
+        output_arr, output_unit = unit_conversion(
+            counts, 'counts', '#', output_i,
+            duration_s=duration,
+            energy_bin_width_keV=ebinwidth,
+            attenuator_state=att,
+            detector_efficiency=1)
+        output[output_i] = output_arr, output_unit
+
+    # If detector pattern is 'all', get all available channels:
+    if detector == "all":
+        detector = ("O", "T", "OT", "F", "FT", "FTO")
+
+    # Change telescope and detector coincidince into tuples,
+    # if just a str (e.g. "A" and "O")
+    if isinstance(telescope, str):
+        telescope = (telescope,)
+
+    if isinstance(detector, str):
+        detector = (detector,)
+
+    fto = {}
+    for t, d in itertools.product(telescope, detector):
+
+        t_id = cal_telescope.index(t.upper())
+        dp_id = cal_detector_coincidence.index(d.upper())
+
+        label = "{}-{}".format(t.upper(), d.upper())
+
+        # Indices for subset in 256 bins
+        index = np.where(
+            (detector_pattern_num == dp_id) &
+            (telescope_num == t_id))[0]
+
+        # print(index_tid_pid.size)
+
+        if index.size != 0:
+
+            # Retrieve counts / E / dE
+            e_i = edeposit[index]
+            de_i = ebinwidth[index]
+
+            e_label = "{}_energy".format(label)
+            de_label = "{}_denergy".format(label)
+
+            if include_unit:
+                fto[e_label] = (e_i, e_unit)
+                fto[de_label] = (de_i, e_unit)
+            else:
+                fto[e_label] = e_i
+                fto[de_label] = de_i
+
+            for i in output_data:
+                final_label_i = "{}_{}".format(label, i)
+                data_i, unit_i = output[i]
+                if include_unit:
+                    fto[final_label_i] = (data_i[:, index], unit_i)
+                else:
+                    fto[final_label_i] = data_i[:, index]
+
+    return fto
+
+
+def fto_to_calibrated(fto_data_dict,
+                      mapid=9,
+                      look_directions=("F", "R"),
+                      particle=("elec", "ion"),
+                      output_data=("counts", "rate", "flux"),
+                      include_unit=True):
 
     calibrated_data = {}
-
-    # Retain non-flux/rates arrays
-    for n in raw_data_dict:
-        if ("flux" not in n and "rate" not in n) and "energy" not in n:
-            calibrated_data[n] = raw_data_dict[n]
-
-    # Recover when the attenuator actuates
-    atten = raw_data_dict["attenuator_state"]
-    atten_actuate = np.where(np.ediff1d(atten) != 0)[0]
+    # print(fto_data_dict.keys())
 
     for (dir_i, p_i) in itertools.product(look_directions, particle):
 
         calib_data_name_i = "{}_{}".format(dir_i, p_i)
 
         # Get the detector element for the requested particle:
-        detector = particle_to_dp[particle_name]
+        detector = particle_to_dp[p_i]
 
         # Get the telescope name:
-        telescope =\
-            p_ld_to_telescope["{}_{}".format(look_direction, look_direction)]
+        p_ld = "{}_{}".format(p_i, dir_i)
+        telescope = p_ld_to_telescope[p_ld]
 
         # Get the indices used for the requested particle and map
         index_slice = bin_map_index_slice[mapid][p_i]
 
         # print(dir_i, p_i, detector_pattern_i, telescope_i)
-        raw_data_name_i = "{}-{}".format(telescope_i, detector_pattern_i)
+        raw_data_name_i = "{}-{}".format(telescope, detector)
 
-        raw_en_i = raw_data_dict["{}_energy".format(raw_data_name_i)]
-        raw_de_i = raw_data_dict["{}_denergy".format(raw_data_name_i)]
-        raw_data_i = raw_data_dict["{}_{}".format(raw_data_name_i, unit)]
+        en_label = "{}_energy".format(raw_data_name_i)
+        de_label = "{}_denergy".format(raw_data_name_i)
+
+        if include_unit:
+            raw_en_i, e_unit = fto_data_dict[en_label]
+            raw_de_i, e_unit = fto_data_dict[de_label]
+        else:
+            raw_en_i = fto_data_dict[en_label]
+            raw_de_i = fto_data_dict[de_label]
 
         # The electronic noise threshold is approximately 11 keV
         # and the amount of energy is digitized with a resolution
@@ -360,19 +496,151 @@ def raw_to_calibrated(raw_data_dict, mapid=9, look_directions=("F", "R"),
         # input()
         calib_en_i = raw_en_i[index_slice] + 10.2
         calib_de_i = raw_de_i[index_slice]
-        calib_data_i = raw_data_i[:, index_slice]
 
-        # Next, false counts can be created when the
-        # attenuator is opened/closed.
-        # Detect when atten changes state and NaN the flux
-        # before/after actuation.
-        calib_data_i[atten_actuate, :] = np.nan
-        calib_data_i[atten_actuate + 1, :] = np.nan
-        # calib_data_i[atten_actuate + 2, :] = np.nan
+        new_en_label = "{}_energy".format(calib_data_name_i)
+        new_de_label = "{}_denergy".format(calib_data_name_i)
 
-        calibrated_data["{}_energy".format(calib_data_name_i)] = calib_en_i
-        calibrated_data["{}_denergy".format(calib_data_name_i)] = calib_de_i
-        calibrated_data["{}_{}".format(calib_data_name_i, unit)] = calib_data_i
+        if include_unit:
+            calibrated_data[new_en_label] = (calib_en_i, e_unit)
+            calibrated_data[new_de_label] = (calib_de_i, e_unit)
+        else:
+            calibrated_data[new_en_label] = calib_en_i
+            calibrated_data[new_de_label] = calib_de_i
+
+        for output_i in output_data:
+            d_name = "{}_{}".format(raw_data_name_i, output_i)
+            new_d_name = "{}_{}".format(calib_data_name_i, output_i)
+
+            if include_unit:
+                raw_data_i, unit_i = fto_data_dict[d_name]
+            else:
+                raw_data_i = fto_data_dict[d_name]
+
+            calib_data_i = raw_data_i[:, index_slice]
+
+            if include_unit:
+                calibrated_data[new_d_name] = (calib_data_i, unit_i)
+            else:
+                calibrated_data[new_d_name] = calib_data_i
 
     return calibrated_data
 
+
+available_data_names = ("flux", "eflux", "count_rate", "rate", "counts")
+
+
+def unit_conversion(data, data_name, data_unit,
+                    final_data_name,
+                    duration_s=None,
+                    energy_bin_keV=None,
+                    energy_bin_width_keV=None,
+                    attenuator_state=None,
+                    geometric_factor_cm2ster=None,
+                    detector_efficiency=None):
+
+    '''Convert SEP data from one type
+        (flux, eflux, count_rate, counts)
+        into another.'''
+
+    if data_name == final_data_name:
+        # No conversion needed
+        return data, data_unit
+
+    if data_name not in available_data_names and\
+            final_data_name not in available_data_names:
+        raise IOError(
+            "Unit conversion not recognized from"
+            " '{}' to '{}', only available for: {}".format(
+                data_name, final_data_name, available_data_names))
+
+    # Deal with counts first, requires a duration:
+    if data_name == "counts" and duration_s is None:
+        raise IOError(
+            "Need duration (seconds) to determine"
+            " count rate / flux / eflux.")
+    # If going to/from flux, need geometric factor or
+    # attenuator state, efficiency, and energy bin width:
+    if final_data_name == "flux" or data_name == "flux":
+        if geometric_factor_cm2ster is None and attenuator_state is None:
+            raise IOError(
+                "Need geometric factor (cm2ster) / "
+                "attenuator state to determine"
+                " count rate / flux / eflux.")
+        elif attenuator_state is None:
+            geom_factor = geometric_factor_cm2ster
+        elif geometric_factor_cm2ster is None:
+            geom_factor = np.where(
+                attenuator_state == 2, geom[1], geom[0])
+
+        # Need energy bin width:
+        if energy_bin_width_keV is None:
+            raise IOError(
+                "Need energy bin width (keV) to get flux.")
+
+        if detector_efficiency is None:
+            # Set equal to the same number in SEP calibration routines
+            detector_efficiency = efficiency
+
+        flux_factor = energy_bin_width_keV[np.newaxis, :] *\
+            geom_factor[:, np.newaxis]*detector_efficiency
+
+    # Need center energy of the bin for eflux:
+    if (final_data_name == "eflux" or data_name == "eflux")\
+            and energy_bin_keV is None:
+        raise IOError("Require energy_bin_keV for eflux.")
+
+    # Define normalization factor:
+    norm_factor = np.ones(shape=data.shape)
+
+    # going from counts <-> flux, eflux, count_rate
+    # requires x or / by duration
+    if data_name == "counts":
+        norm_factor /= duration_s[:, np.newaxis]
+    elif final_data_name == "counts":
+        norm_factor *= duration_s[:, np.newaxis]
+        final_unit = "#"
+
+    # Similarly for eflux:
+    if data_name == "eflux":
+        norm_factor /= energy_bin_keV[np.newaxis, :]
+    elif final_data_name == "eflux":
+        norm_factor *= energy_bin_keV[np.newaxis, :]
+        final_unit = "keV/cm2/s/sr/keV"
+
+    # And now for flux:
+    if data_name == "flux" and "count" in final_data_name:
+        norm_factor *= flux_factor
+    elif final_data_name == "flux":
+        if "count" in data_name:
+            # #/s -> #/cm2/s/ster
+            norm_factor /= flux_factor
+        final_unit = "#/cm2/s/sr/keV"
+
+    if "rate" in final_data_name:
+        final_unit = "#/s"
+
+    final_data = data * norm_factor
+
+    return final_data, final_unit
+
+
+def telescope_to_tid(telescope_tuple):
+    '''Given a tuple of SEP telescopes,
+    retrieve the index they are at in a given
+    pre-defined map.'''
+
+    if isinstance(telescope_tuple, str):
+        telescope_tuple = (telescope_tuple,)
+
+    t_index = []
+    for t in telescope_tuple:
+        t_upper = t.upper()
+
+        if t_upper not in telescope:
+            raise ValueError(
+                "'{}'' not a telescope of SEP, try 'A' or 'B' instead.")
+        t_id_i = telescope.index(t_upper)
+
+        t_index.append(t_id_i)
+
+    return t_index
