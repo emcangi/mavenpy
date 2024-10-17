@@ -1,6 +1,7 @@
 import numpy as np
 import datetime as dt
 from collections.abc import Iterable
+import itertools
 
 from dateutil.parser import parse
 # import calendar
@@ -16,7 +17,7 @@ utc_19700101_dt = dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
 # discrepancy for Feb 27 2017 SEP L2data).
 
 
-def process_data_dict(dataset_dict, conditional_array=None,
+def process_data_dict(dataset_dict, time_var_name=None, conditional_array=None,
                       units=None, alias=None, scrub_NaN_times=None):
     '''Routine to iterate through datasets in
     a dictionary (usually from read_cdf and read_sav
@@ -28,9 +29,10 @@ def process_data_dict(dataset_dict, conditional_array=None,
     # Determine the indices of conditional array
     # (and non-NAN times) to select data:
     if conditional_array is not None or scrub_NaN_times:
-        time_unix_key =\
-            [i for i in dataset_dict if 'unix' in i or 'unx' in i][0]
-        time_unix = dataset_dict[time_unix_key]
+        if not time_var_name:
+            time_var_name =\
+                [i for i in dataset_dict if 'unix' in i or 'unx' in i][0]
+        time_unix = dataset_dict[time_var_name]
         n_t = len(time_unix)
 
         if scrub_NaN_times:
@@ -53,20 +55,10 @@ def process_data_dict(dataset_dict, conditional_array=None,
         # Get dataset
         data_i = dataset_dict[dataset_name]
 
-        # Check dims to see if data is a
-        # numpy array with a matching conditional
-        # dimension:
+        # if a condition is applied and the data is a numpy array,
+        # access only indices matching the condition index
         if isinstance(data_i, np.ndarray) and conditional_array is not None:
-            data_i_shape = data_i.shape
-            data_i_dim = len(data_i_shape)
-            # input()
-
-            if n_t in data_i_shape:
-                matching_data_i = data_i[condition_index, ...]
-            else:
-                matching_data_i = data_i
-
-            data_i = matching_data_i
+            data_i = subset_arr(data_i, condition_index, n_t)
 
         # Assign unit, if provided
         if units is not None:
@@ -334,10 +326,18 @@ def make_dt_range(start_date, n_points_per_day=2,
         start_date=start_date, n_days=n_days, end_date=end_date,
         default_start_date=None, default_end_date=None)
 
-    N = n_points_per_day * n_days
-    dt_range =\
-        [n_days * dt.timedelta(days=i) / N + start_date_dt
-         for i in range(N + 1)]
+    # Old:
+    # N = n_points_per_day * n_days
+    # dt_range =\
+    #     [n_days * dt.timedelta(days=i) / N + start_date_dt
+    #      for i in range(N + 1)]
+
+    delta_t =\
+        [dt.timedelta(days=1)*i/n_points_per_day for i
+         in range(n_points_per_day)]
+    days = [start_date_dt + dt.timedelta(days=i) for i in range(n_days)]
+
+    dt_range = [(i + j) for (i, j) in itertools.product(days, delta_t)]
 
     return dt_range
 
@@ -559,3 +559,20 @@ def broadcast_index(array_nd, array_1d, matching_axis_index=Ellipsis,
     selection_tuple = tuple(selection_tuple)
 
     return axis_index, selection_tuple
+
+
+def subset_arr(data_i, condition_index, N):
+
+    # Check dims to see if data is a
+    # numpy array with a matching conditional
+    # dimension:
+    data_i_shape = data_i.shape
+    data_i_dim = len(data_i_shape)
+    # input()
+
+    if N in data_i_shape:
+        matching_data_i = data_i[condition_index, ...]
+    else:
+        matching_data_i = data_i
+
+    return matching_data_i
