@@ -87,16 +87,21 @@ if __name__ == "__main__":
     swia_moments = load.load_data(swim_file_names)
 
     # Get MAG file names / load the MAG data
+    mag_ext = 'sav'
+    mag_res = '30sec'
+    mag_level = 'l2'
+    mag_coord = 'pl'
+
     if args.download:
         retrieve.sdc_retrieve(
             'mag', destination_dir=data_directory,
             username=username, password=password,
-            ext='sav', res='30sec', level='l2', coord='pl',
+            ext=mag_ext, res=mag_res, level=mag_level, coord=mag_coord,
             start_date=start_date, end_date=end_date)
         print("MAG files updated.")
     mag_file_names = file_path.local_file_names(
         data_directory, 'mag', start_date=start_date, end_date=end_date,
-        ext='sav', res='30sec', level='l2', coord='pl', source='ssl_sprg')
+        ext=mag_ext, res=mag_res, level=mag_level, coord=mag_coord, source='ssl_sprg')
     mag = load.load_data(
         mag_file_names, ext='sav', res='30sec', level='l2', coord='pl')
     mag_epoch = mag["epoch"][0]
@@ -169,6 +174,7 @@ if __name__ == "__main__":
     ax[1].plot(mag_epoch, bx, color='b', label='Bx')
     ax[1].plot(mag_epoch, by, color='g', label='By')
     ax[1].plot(mag_epoch, bz, color='r', label='Bz')
+    ax[1].axhline(0, color='gray', linestyle='--')
     ax[1].set_ylabel("B, nT")
     ax[1].legend()
 
