@@ -307,8 +307,22 @@ def parse_tplot_plot_parameters(data, verbose=None):
     return plot_info_dict_i
 
 
+def read_sav(sav_file_path, field_names='', struct_name='',
+             flatten_struct=True):
 
-def read_sav(sav_file_path, field_names='', struct_name=''):
+    '''Reads an IDL sav file using scipy.io.readsav
+    and iterates through the elements to remove tuple indexing,
+    allowing easier access of the data.
+
+    sav_file_path: location of IDL sav file
+    field_names: the names of fields in the IDL structure,
+        if already known.
+    struct_names: names of the saved structures, if
+        already known and if there are more than one.
+    flatten_struct: By default, will flatten all structures
+        into one final dict with the fields pre-pended by
+        the struct name. If set to False, will instead save
+        structs as separate dicts in the final dict.'''
 
     # Open IDL sav file, which is read into
     # a dictionary containing structure names,
@@ -374,15 +388,20 @@ def read_sav(sav_file_path, field_names='', struct_name=''):
         # e.g. SEP Level 1 data has a column called "DATA"
         # in six structures: s[1,2]-[nse,svy,arc].
 
-        if len(struct_name_arr) == 1:
-            precede_str_i = ''
-        else:
+        if len(struct_name_arr) != 1 and flatten_struct:
             precede_str_i = struct_name_i
+        else:
+            precede_str_i = ''
 
         data_dict_i = reformat_sav(
             data_sav_i, field_names, precede_str=precede_str_i)
-        data_dict.update(data_dict_i)
+
+        if flatten_struct:
+            data_dict.update(data_dict_i)
+        else:
+            data_dict[struct_name_i] = data_dict_i
         data_dict_i = {}
+        data_sav_i = {}
 
     return data_dict
 
