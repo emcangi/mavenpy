@@ -22,18 +22,21 @@ Development
 
 This package is still in development. Follow these instructions to install:
 
-0. From terminal or conda, use git to clone the repository to local:
+0. From terminal or conda, cd into the directory you want to install mavenpy in, and use git to clone the repository to local:
 
-    ``git clone <>``
+    ``git clone https://github.com/rjolitz/mavenpy.git``
 
-1. Install the package:
+1. Cd into mavenpy and run the following command to install the package:
     
     ``python -m pip install -e .``
 
-2. Run ``demo_solarwind.py`` to confirm your install is working
+2. (a) If you already have a directory that contains MAVEN data, run ``demo_solarwind.py`` to confirm your install is working
 
-    ``python demo_solarwind.py -d <<MAVEN_CONTAINING_DIR_HERE>> --start_date 2015-03-01 --n_days 1``
+    ``python demo_solarwind.py -d MAVEN_DATA_DIR --start_date 2015-03-01 --n_days 1``
 
+2. (b) OR if you don't have a directory that contains MAVEN data, run ``demo_solarwind.py`` with the download flag to confirm your install is working
+
+    ``python demo_solarwind.py -d MAVEN_DATA_DIR --start_date 2015-03-01 --n_days 1 --download``
 
 Running
 ==========
