@@ -120,7 +120,8 @@ def uncompress(uncompressed_dim, index_arrs, compressed_arr,
 
 
 def read(file_path, dataset_type="None", fields=None, lib='cdflib',
-         preprocess=True, include_unit=True, **kwargs):
+         include_unit=True, preprocess=True, over_fov="sum", swia_qlevel=0.5,
+         uncompress_fine=True):
 
     """Returns SWIA data.
 
@@ -128,72 +129,79 @@ def read(file_path, dataset_type="None", fields=None, lib='cdflib',
     routine 'mvn_swia_load_l2_data.pro'. We thank and credit the
     authors of both.
 
+    file_path: SWIA file to be read.
     dataset_type: name of dataset to be pulled. options:
-        - m: moment data, containing plasma moments (ion density, velocity,
-            pressure, temperature) calculated onboard
-        - f: fine high resolution spectra, 10 small anode (phi) counts/eflux
-            for 48 energy steps and 12 deflection (theta)
-            steps around the peak flux
-        - c: coarse low resolution spectra, summed over anodes (phi),
+        - onboardsvymom: moment data, containing plasma moments
+            (ion density, velocity, ressure, temperature) calculated onboard
+        - onboardsvyspec: onboard 1D spectra, not weighted for
+            reduced geometric factor at high deflection angles.
+            should not be used for science.
+        - fine(svy/arc)3d: fine high resolution spectra, 10 small
+            node (phi) counts/eflux for 48 energy steps and 12
+            deflection (theta) steps around the peak flux
+        - coarse(svy/arc)3d: coarse low resolution spectra,
+            summed over anodes (phi),
             deflection steps (theta), and energy bins to produce counts/eflux
             for 16 phi bins x 48 energy bins x 4 deflection bins
-        - s: onboard 1D spectra, not weighted for reduced geometric factor at
-            high deflection angles. should not be used for science.
-    sum_over_fov: True if summing over the deflection/anode angles
 
-    data_file: name of file to be read
+    over_fov: "sum" if summing over the deflection/anode angles,
+        "avg" if averaging over, "None" if not doing anything.
+    preprocess: Boolean, if on will remove NaNs, recenter time axis,
+        uncompress fine data product, etc.
     swia_qlevel: optional, floating point, quality flag for SWIA cutoff.
-
-    Returns dictionary of time, Np, Vsc, Vmso corresponding
-    to requested dataset.
     """
 
     if dataset_type == "None":
         filename = os.path.split(file_path)[1]
-        if "onboardsvyspec" in filename:
-            dataset_type = "s"
-        elif "onboardsvymom" in filename:
-            dataset_type = "m"
-        elif "coarse" in filename:
-            dataset_type = "c"
-        elif "fine" in filename:
-            dataset_type = "f"
+        dataset_type = filename.split("_")[3]
 
     if not fields:
-        if dataset_type == "m":
+        if dataset_type == "onboardsvymom":
             # Moment
             fields = ("time_unix", "density", "velocity", "velocity_mso",
                       "epoch", "quality_flag", "decom_flag", "atten_state")
 
-        if dataset_type == "s":
+        elif dataset_type == "onboardsvyspec":
             # spectra
             fields = ("time_unix", "epoch", "num_accum", "energy_spectra",
                       "decom_flag", "spectra_diff_en_fluxes", "spectra_counts",
                       "de_over_e_spectra")
 
-        if dataset_type == "c":
+        elif "coarse" in dataset_type:
             # coarse
-            fields = ("time_unix", "epoch", "num_accum", "energy_coarse",
-                      "diff_en_fluxes", "counts", "de_over_e_coarse")
-            # fields = ("time_unix", "epoch", "num_accum", "energy_coarse",
-            #           "atten_state"
-            #           "theta_coarse", "theta_atten_coarse", "phi_coarse",
-            #           "diff_en_fluxes", "counts", "de_over_e_coarse")
+            if over_fov == "avg" or over_fov == "sum":
+                fields = ("time_unix", "epoch", "num_accum", "energy_coarse",
+                          "diff_en_fluxes", "counts", "de_over_e_coarse")
+            else:
+                fields = ("time_unix", "epoch", "num_accum", "energy_coarse",
+                          "atten_state", "theta_coarse", "theta_atten_coarse",
+                          "phi_coarse", "diff_en_fluxes", "counts",
+                          "de_over_e_coarse")
 
-        if dataset_type == "f":
+        elif "fine" in dataset_type:
             # fine
-            fields = ("time_unix", "epoch", "energy_fine",
-                      "diff_en_fluxes", "counts",  "estep_first")
-            # fields = ("time_unix", "epoch", "energy_fine",
-            #           "atten_state"
-            #           "theta_fine", "theta_atten_fine", "phi_fine",
-            #           "diff_en_fluxes", "counts", "de_over_e_fine")
+            if over_fov == "avg" or over_fov == "sum":
+                fields = ("time_unix", "epoch", "energy_fine",
+                          "diff_en_fluxes", "counts",  "estep_first")
+            else:
+                fields = ("time_unix", "epoch", "energy_fine", "atten_state",
+                          "theta_fine", "theta_atten_fine", "phi_fine",
+                          "diff_en_fluxes", "counts", "de_over_e_fine",
+                          "estep_first", "dstep_first")
+        else:
+            raise ValueError(
+                "No dataset of name '{}' recognized, use instead: "
+                "onboardsvyspec, onboardsvymom, coarse(svy/arc)3d, "
+                "or fine(svy/arc3d).")
 
     # Pull data from the SWIA Level 2 CDF
     data = read_cdf(file_path, fields, lib=lib)
 
     if preprocess:
-        data = process(data, dataset_type, fields=fields, **kwargs)
+        data = process(data, dataset_type, fields=fields,
+                       over_fov=over_fov,
+                       uncompress_fine=uncompress_fine,
+                       swia_qlevel=swia_qlevel)
 
     # Assign unit
     if include_unit:
@@ -202,8 +210,7 @@ def read(file_path, dataset_type="None", fields=None, lib='cdflib',
 
 
 def process(data_cdf, dataset_type, fields=None, swia_qlevel=0.5,
-            sum_over_fov=False, avg_over_fov=True,
-            uncompress_fine=False):
+            over_fov="sum", uncompress_fine=False):
 
     # Times reported in L0 and L2 files correspond
     # to the start time of accumulation. Thus,
@@ -216,7 +223,7 @@ def process(data_cdf, dataset_type, fields=None, swia_qlevel=0.5,
     if not fields:
         fields = list(data_cdf)
 
-    if "m" in dataset_type or "f" in dataset_type:
+    if dataset_type == "onboardsvymom" or "fine" in dataset_type:
         ctime_unx = data_cdf["time_unix"] + 2.0
     else:
         ctime_unx = data_cdf["time_unix"] + 4.0*data_cdf["num_accum"]/2
@@ -229,12 +236,12 @@ def process(data_cdf, dataset_type, fields=None, swia_qlevel=0.5,
     # to the SPEDAS routine.
     non_nan_index = (~np.isnan(ctime_unx))
 
-    if dataset_type == "m":
+    if dataset_type == "onboardsvymom":
         acceptable_index = (
             (data_cdf["decom_flag"] >= swia_qlevel) &
             ((data_cdf["quality_flag"] >= swia_qlevel) &
              non_nan_index))
-    elif dataset_type == "s":
+    elif dataset_type == "onboardsvyspec":
         # If recovering onboard S/C spectra from SWIA (SWIS),
         # then we only need to remove low quality datapoints.
         acceptable_index = (
@@ -245,23 +252,27 @@ def process(data_cdf, dataset_type, fields=None, swia_qlevel=0.5,
 
     data_cdf["time_unix"] = ctime_unx
 
-    data_cdf = helper.process_data_dict(data_cdf, conditional_array=acceptable_index)
+    data_cdf = helper.process_data_dict(
+        data_cdf, conditional_array=acceptable_index)
 
     # SWIA efluxes and counts are a 4D structure [time, theta, phi, energy]
     # If requested, can sum over all theta & phi bins to find
     # total counts / average eflux.
 
-    if uncompress_fine:
+    if "fine" in dataset_type and uncompress_fine:
         energy = data_cdf["energy_fine"]
         estep_first = data_cdf["estep_first"].astype('int')
-        dstep_first = data_cdf['dstep_first'].astype('int')
-        phi_first = np.zeros(shape=data_cdf["time_unix"].shape).astype('int')
-        theta = data_cdf['theta_fine']
-        phi = data_cdf['phi_fine']
+        if not (over_fov == "sum" or over_fov == "avg"):
+            dstep_first = data_cdf['dstep_first'].astype('int')
+            phi_first = np.zeros(shape=data_cdf["time_unix"].shape).astype('int')
+            theta = data_cdf['theta_fine']
+            phi = data_cdf['phi_fine']
 
-    if dataset_type == "c":
+    # No need to define norm if not either coarse or fine,
+    # since there are no 4d arrays in the other two:
+    if "coarse" in dataset_type:
         norm = 64
-    elif dataset_type == "f":
+    elif "fine" in dataset_type:
         norm = 120
 
     # Retrieve the fields corresponding to the
@@ -273,18 +284,18 @@ def process(data_cdf, dataset_type, fields=None, swia_qlevel=0.5,
         data_i = data_cdf[name_arr_4d]
         # Sum over the theta & fine bins, divide by the number
         # of theta and phi bins if requested:
-        if sum_over_fov or avg_over_fov:
+        if over_fov == "sum" or over_fov == "avg":
             data_i = np.sum(data_i, axis=(1, 2))
-        if avg_over_fov:
-            data_i = data_i / norm
+            if over_fov == "avg":
+                data_i = data_i / norm
 
         # SWIA fine spectra index is timevarying,
         # so if want to uncompress on this time step
         # can do so.
-        if dataset_type == "f" and uncompress_fine:
+        if "fine" in dataset_type and uncompress_fine:
             dim_all = (len(energy),)
             start_index = (estep_first,)
-            if not (sum_over_fov and avg_over_fov):
+            if not (over_fov == "sum" or over_fov == "avg"):
                 dim_all = (len(phi), len(theta), len(energy))
                 start_index = (phi_first, dstep_first, estep_first)
             data_i = uncompress(
