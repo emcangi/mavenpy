@@ -911,6 +911,7 @@ def load_kernels(data_directory,
                  mirror_spedas_dir_tree=True,
                  verbose=None,
                  load_spacecraft=True,
+                 load_spacecraft_pointing=True,
                  load_APP=False,
                  spk_ext=("bsp", "orb")):
 
@@ -927,8 +928,13 @@ def load_kernels(data_directory,
 
         # Add the MAVEN-specific kernels
         if load_spacecraft:
-            kernels += ['fk', 'sclk', 'ck_sc', 'spk', 'ik']
-            kernel_groups += ["maven"]*5
+            kernels += ['fk', 'sclk', 'spk', 'ik']
+            kernel_groups += ["maven"]*4
+
+            # Add spacecraft pointing info:
+            if load_spacecraft_pointing:
+                kernels += ['ck_sc']
+                kernel_groups += ['maven']
 
             # Add the APP pointing info, if desired.
             if load_APP:
@@ -1152,3 +1158,56 @@ def load_MAVEN_position(start_date, n_days=None, end_date=None,
     sc_time_unx = helper.UTC_to_UNX(sc_time_utc)
 
     return sc_time_utc, sc_time_unx, x, y, z
+
+
+def local_solar_time(start_date, n_days=None, end_date=None,
+                     n_sample_points=400, frame="MAVEN_MSO"):
+
+    '''Adaptation of mvn_mars_localtime.pro, requires time.
+
+    Returns local solar time where 0=midnight'''
+
+    # Get start date, n_days, end_date
+    if end_date is None:
+        start_date, n_days, end_date = helper.sanitize_date_inputs(
+            start_date=start_date, n_days=n_days, end_date=end_date)
+
+    sc_time_utc = helper.make_dt_range(
+        start_date, end_date=end_date, n_points_per_day=n_sample_points)
+    et = dt_to_et(sc_time_utc)
+
+    maven_iau = spiceypy.spkpos(
+        'MAVEN', et, 'IAU_Mars', 'None', 'Mars')[0]
+
+    maven_lon = np.degrees(np.arctan2(maven_iau[:, 1], maven_iau[:, 0]))
+    maven_lon = np.where(maven_lon < 0, 360 + maven_lon, maven_lon)
+    maven_lat = np.degrees(np.arcsin(maven_iau[:, 2]))
+
+    sun_mso = [1, 0, 0]
+    q = [spiceypy.pxform('MAVEN_MSO', 'IAU_Mars', i) for i in et]
+
+    sun = [quaternion_rotation(spiceypy.m2q(q_i), sun_mso) for q_i in q]
+    sun = np.array(sun)
+
+    subsolar_lon = np.degrees(np.arctan2(sun[:, 1], sun[:, 0]))
+    subsolar_lon = np.where(subsolar_lon < 0, 360 + subsolar_lon, subsolar_lon)
+
+    subsolar_lat = np.degrees(np.arcsin(sun[:, 2]))
+
+    # ; 0 = midnight, 12 = noon
+    lst = (maven_lon - subsolar_lon)*(12./180.) - 12
+    lst -= 24*np.floor(lst/24)  #; wrap to 0-24 range
+
+    # from matplotlib import pyplot as plt
+    # fig, ax = plt.subplots(nrows=3)
+    # ax[0].plot(sc_time_utc, maven_lon)
+    # ax[0].plot(sc_time_utc, subsolar_lon)
+    # ax[1].plot(sc_time_utc, maven_lat)
+    # ax[1].plot(sc_time_utc, subsolar_lat)
+    # ax[2].plot(sc_time_utc, lst)
+    # plt.show()
+
+    return lst
+
+
+
