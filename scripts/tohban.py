@@ -1,3 +1,4 @@
+import sys
 import os
 import argparse
 import datetime as dt
@@ -298,8 +299,23 @@ if __name__ == "__main__":
         "--n_days", help="Number of days since start date to recover date.",
         type=int)
 
+    # Argument for providing the PFP username for download:
     parser.add_argument(
         "--sprg_username", help="Username for PFP download.", required=True)
+
+    # Argument for controling whether or not to initiate download:
+    parser.add_argument(
+        "--download",
+        help="Keyword to download data if not already available or supplied as -f.",
+        action='store_true')
+
+    # Argument to show (or not) the altitude colored by magnetic region
+    # This can be disabled if no wish to download spice:
+    parser.add_argument(
+        "--skip_alt_by_region",
+        help="Keyword to skip plotted altitude colored by magnetic region"
+             " e.g. solar wind, sheath, pileup.",
+        action='store_true')
 
     # Keyword to include print statements
     parser.add_argument(
@@ -308,13 +324,15 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    skip_orb = False
+    # Keyword that includes the altitude profile plotted by region
+    # (requires spice kernels)
+    plot_alt_by_region = (not args.skip_alt_by_region)
 
     start = args.start_date
     n_days = args.n_days
     end = args.end_date
-    dl_kernels = False
-    dl_tohban = True
+    dl_kernels = args.download
+    dl_tohban = args.download
 
     username = args.sprg_username
     password = "{}_pfp".format(username)
@@ -326,8 +344,15 @@ if __name__ == "__main__":
         sprg_username=username, sprg_password=password)
     # input()
 
-    print(plot_info.keys())
-    print(data.keys())
+    plot_info_keys = list(plot_info.keys())
+    data_keys = list(data.keys())
+
+    if len(data_keys) == 0:
+        print("Exiting, no datafiles / data to show.")
+        sys.exit()
+
+    print(plot_info_keys)
+    print(data_keys)
 
     tplot_names = plot_info["tplot_order"]
     print(tplot_names)
@@ -372,10 +397,7 @@ if __name__ == "__main__":
     for i, plot_name_i in enumerate(tplot_names):
 
         print(plot_name_i)
-        if plot_name_i == 'alt2':
-            if skip_orb or not args.data_directory:
-                continue
-
+        if plot_name_i == 'alt2' and plot_alt_by_region:
             plot_names.append(plot_name_i)
             plot_axis.append(i)
 
@@ -450,15 +472,13 @@ if __name__ == "__main__":
     plt.subplots_adjust(
         left=0.135, bottom=0.05, right=0.88, top=0.95, wspace=0, hspace=0)
 
-    if not skip_orb and args.data_directory:
+    if plot_alt_by_region:
         orb_ax = anc.add_orbit_axis(ax[0], ephemeris=eph, label=None)
         orb_ax.ticklabel_format(useOffset=False)
 
     for i, plot_name_i in zip(plot_axis, plot_names):
 
-        if plot_name_i == "alt2":
-            if skip_orb:
-                continue
+        if plot_name_i == "alt2" and plot_alt_by_region:
 
             # Get orbit info
             orbnum = eph["orbnum"]
