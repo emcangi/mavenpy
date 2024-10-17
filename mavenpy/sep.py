@@ -6,18 +6,32 @@ import numpy as np
 # from .file_path import instrument_data_file
 from .helper import UNX_to_UTC, process_data_dict
 from .read import read_cdf, read_sav
-from .sep_calib import *
+from .sep_calib import raw_to_fto, fto_to_calibrated
 
 
 # SEP read routines
 
+atten_unit = "1 (open) or 2 (closed)"
+count_unit = "#"
 
-units = {"time_unix": "unx", "epoch": "utc",
+units = {"time_unix": "unx", "time": "unx",
+         "epoch": "utc",
+         "time_met": "Mission-elapsed time",
+         "time_ephemeris": "Ephemeris time",
+         "mapid": "# of the map used",
+         "seq_cntr": "PDFPU sequence counter for readout",
+         "att":  atten_unit,
+         "atten":  atten_unit,
+         "attenuator_state": atten_unit,
+         "raw_counts": count_unit,
+         "counts": count_unit,
+         "accum_time": "# 1-s accumulations per sample",
+         "delta_time": "s duration of observation",
+
          "energy": "keV",
          "flux": "#/cm2/s/sr/keV",
          "eflux": "keV/cm2/s/sr/keV",
-         "atten":  "1 (open) or 2 (closed)",
-         "attenuator_state": "1 (open) or 2 (closed)",
+
          "mvn_pos_mso": "km, MSO (x, y, z)",
          "mvn_pos_geo": "km, IAU (x, y, z)",
          "mvn_sza": "deg.",
@@ -71,57 +85,102 @@ def assign_unit_sep_cal(data, energy_unit):
 #########################################
 
 
-def read(file_path,
-         level="None", dataset_type='None',
-         convert_raw_to_calib_units=None,
-         include_unit="", label_by_detector=True,
-         fields=None, t_ids=None, dp_ids=None,
-         detector=None,
-         particles=("elec", "ion"),
-         look_directions=("r", "f"),
-         lib='cdflib',
-         columns=("time", "epoch", "atten", "energy", "flux"),
-         energy_unit='eV'):
+def read(file_path, lib='cdflib', include_unit=True,
+         level="None",
+         label_by_detector=True,
+         dataset='None', sensor='None', telemetry_mode='None',
+         telescope=("A", "B"), detector=("F", "O", "FTO"),
+         particles=("elec", "ion"), look_directions=("r", "f"),
+         energy_unit='eV',
+         output_calibration_level='cal',
+         output_data_units=("counts", "rate", "flux"),
+         fields=None):
 
-    if dataset_type == "None":
+    '''
+    data_level: either 'cal', 'raw', or 'fto'.
+        (cal: calibrated in units of particle flux,
+         fto: partially calibrated in detector units,
+         raw: uncalibrated, counts in 256 bins) '''
+
+    # Retrieve the dataset information from the filename,
+    # if not provided:
+    if dataset == "None":
         filename = os.path.split(file_path)[1]
         dataset_tuple = filename.split("_")
         level = dataset_tuple[2]
+        mask_atten_actuation = True
 
-        if "cal" in filename:
-            dataset_type = "cal"
-        elif "raw" in filename:
-            dataset_type = "raw"
-        elif "anc" in dataset_tuple:
-            dataset_type = "anc"
-        elif "pad" in dataset_tuple:
-            dataset_type = "pad"
-    # print(filename)
-    # print(dataset_tuple)
-    # print(dataset_type)
+        cadence_options = ("32sec", "5min", "01hr")
+
+        if level == "l1":
+            # Level 1 files contain both detectors,
+            # and both telemetry modes ('svy' and 'arc').
+            dataset = 'raw'
+            if sensor == "None":
+                sensor = ('1', '2')
+            for c in cadence_options:
+                if c in filename:
+                    mask_atten_actuation = False
+
+        elif level == "l2":
+            # Level 2 files contain both detectors,
+            # and both telemetry modes ('svy' and 'arc').
+            # e.g. s2-cal-svy-full
+            sep_l2_file_type = dataset_tuple[3].split("-")
+            sensor = (sep_l2_file_type[0])[1]
+            dataset = sep_l2_file_type[1]
+            telemetry_mode = sep_l2_file_type[2]
+
+        elif level == "l3":
+            # Only level 3 is PAD
+            dataset = dataset_tuple[3]
+        elif level == "anc":
+            dataset = level
+
+        if telemetry_mode == "None":
+            telemetry_mode = 'svy'
+
+    if isinstance(output_data_units, str):
+        output_data_units = (output_data_units,)
+
+    # print(filename, dataset_tuple, dataset)
 
     # Retrieve right function:
-    if dataset_type == "cal":
+    if dataset == "cal":
+        # Impossible to get fto or raw data from SEP cal data,
+        # since the cal data is already pruned of other channels.
+        if output_calibration_level != 'cal':
+            raise IOError(
+                "SEP cal data can only be returned"
+                " as calibrated fluxes, set data_unit to 'cal'.")
         data = read_cal(
             file_path, include_unit=include_unit,
-            label_by_detector=label_by_detector, fields=fields)
-    elif dataset_type == "pad":
+            label_by_detector=label_by_detector, fields=fields,
+            output_data=output_data_units)
+    elif dataset == "pad":
         data = read_pad(
             file_path, particle=particles, field_names=fields,
             include_unit=include_unit)
-    elif dataset_type == "anc":
+    elif dataset == "anc":
         data = read_anci(
-            file_path,  ext='', detector=detector,
+            file_path,  ext='', detector=sensor,
             look_direction=look_directions,
             field_names=fields, lib=lib,
             include_unit=include_unit)
-    elif dataset_type == "raw":
-        if level == 'l2':
-            data = read_raw(
-                file_path, fields=fields, t_ids=t_ids, dp_ids=dp_ids, lib=lib)
+    elif dataset == "raw":
 
-            if convert_raw_to_calib_units:
-                data = raw_to_calibrated(data)
+        data = read_raw(
+            file_path, lib=lib, level=level, fields=fields,
+            dataset=telemetry_mode,
+            sensors=sensor,
+            telescopes=telescope, detector=detector,
+            particle=particles, look_directions=look_directions,
+            data_unit=output_calibration_level,
+            include_unit=include_unit,
+            output_data=output_data_units,
+            label_by_detector=label_by_detector,
+            mask_atten_actuation=mask_atten_actuation
+            )
 
     return data
 
@@ -131,103 +190,34 @@ def uncertainty(counts, background_count_rate=0.2):
     return np.sqrt(counts + background_count_rate)
 
 
-def read_l1(filename, dataset_types=('svy',),
-            detectors=('1', '2'), telescopes=("A", "B"),
-            detector_pattern=("F", "O"),
-            fields=None, t_ids=None, dp_ids=None):
+def read_raw(filename, lib='cdflib', level='None',
+             fields=None,
+             dataset='svy', sensors=('1', '2'),
+             telescopes=("A", "B"), detector=("F", "O"),
+             particle=("elec", "ion"),
+             look_directions=("F", "R"),
+             data_unit=('raw', 'fto', 'cal'),
+             output_data=("counts", "rate", "flux"),
+             label_by_detector=True,
+             include_unit=True,
+             mask_atten_actuation=True):
 
-    '''
-    dataset_types: string or tuple, 'svy', 'arc', 'nse', 'hkp'
-        There is one per SEP detector (also called sensor,
-        due to semantic overload - SEP is an instrument that
-        consists of two "detectors" (also called sensors), each
-        of which consist of two "detector stacks" (also called telescope
-        since they are oppositely stacked of each other), and
-        each detector stack consists of three actual detectors
-        - semiconductors that emit a number of electron hole pairs upon
-        impact by an energetic particle.
-    '''
-
-    # L1 contains 19 structures, to wit:
-    # - s[1,2]_svy: data collected from survey telemetry
-    # - s[1,2]_arc: data collected from archive telemetry
-    # - s[1,2]_nse: measurement of floating ground for each
-    # detector (A-F,T,O and B-F,T,O).
-    # - s[1,2]_hkp: "housekeeping" data e.g. thermistor info
-    # - m[1,2]_hkp: housekeeping data from MAG (no idea why here)
-    # - ap[20,21,22,23,24]: housekeeping for PFP
-    # - misc description columns (sw_version, prereq_info, spice_info,
-    #   source_filename)
-    if not fields:
-        fields = []
-        if "svy" in dataset_types or "arc" in dataset_types:
-            # ['TIME', 'MET', 'ET', 'SUBSEC', 'F0', 'DELTA_TIME', 'TRANGE',
-            # 'SEQ_CNTR', 'DSEQCNTR', 'SENSOR', 'CCODE', 'MAPID', 'ATT',
-            # 'DURATION', 'COUNTS_TOTAL', 'RATE', 'CFACTOR', 'DATA', 'VALID']
-            fields = ["TIME", "DELTA_TIME", "DATA", "ATT"]
-        if "nse" in dataset_types:
-            fields = ["TIME", "DATA"]
-
-    l1_struc_names =\
-        ["s{}_{}".format(d_i, s) for (d_i, s) in
-         itertools.product(detectors, dataset_types)]
-
-    l1 = read_sav(filename, struct_name=l1_struc_names, field_names=fields)
-
-    if "svy" in dataset_types or "arc" in dataset_types:
-        data_dict = map_to_bins(
-            "energy", output='dict', mapnum=9, sensors=detectors,
-            telescopes=telescopes,
-            detector_pattern=detector_pattern,
-            preceding_str="s")
-
-        if len(l1_struc_names) == 1:
-            data_names = ["{}"]
-            # print(detectors, detectors[0])
-            struc_svy_arc_names = ["s{}".format(detectors[0])]
-        else:
-            data_names = ["{}_{{}}".format(i) for i in l1_struc_names
-                          if "svy" in i or "arc" in i]
-
-            if len(dataset_types) > 1:
-                struc_svy_arc_names =\
-                    ["{}_{}".format(*i.split("_")[::-1])
-                     for i in l1_struc_names if "svy" in i or "arc" in i]
-            else:
-                struc_svy_arc_names =\
-                    ["{}".format(i.split("_")[0])
-                     for i in l1_struc_names if "svy" in i or "arc" in i]
-
-        for data_name_i, svy_arc_i in zip(data_names, struc_svy_arc_names):
-            print(data_name_i, svy_arc_i)
-            counts_i = l1[data_name_i.format("data")]
-            time_i = l1[data_name_i.format("time")]
-            att_i = l1[data_name_i.format("att")]
-
-            counts_dict_i = map_data_to_dict(
-                counts_i, telescopes, detector_pattern, "counts", mapnum=9,
-                preceding_str=svy_arc_i)
-            print(counts_dict_i.keys())
-            data_dict.update(counts_dict_i)
-
-            data_dict["{}_time_unix".format(svy_arc_i)] = time_i
-            data_dict["{}_attenuator_state".format(svy_arc_i)] = att_i
-
-    else:
-        data_dict = l1
-
-    return data_dict
-
-
-def read_raw(filename, fields=None, t_ids=None, dp_ids=None,
-             lib='cdflib', mask_atten_actuate=True):
-
-    """Routine to read the raw counts from Level-2 SEP data, which
-    are grouped into 256 bins: two sets of 128 bins per
+    """Routine to read data from Level-2 or 1 SEP data.
+    Counts are grouped into 256 bins: two sets of 128 bins per
     telescope (A or B), and for each telescope, an energy
     map that samples each event type (e.g. F, O, T, FT, OT, FTO)
     and the ADC pulseheight readout (which is directly proportional
     to energy deposited).
+
+    The Level 1 data contains information for housekeeping,
+    noise floor, and both the archive and survey telemetry. These
+    are not in the Level 2 dataset and cannot be accessed from that
+    data structure.
+
+    Level 1 also contains both sensors '1' and '2', while Level 2
+    has a different file for each.
+
+    data_unit: 'raw', 'cal', or 'fto'
 
     t_ids: telescopes, ('a' and/or 'b)
     dp_ids: event as defined by which detector(s) where crossed,
@@ -237,108 +227,215 @@ def read_raw(filename, fields=None, t_ids=None, dp_ids=None,
         'T'hick as 'F'/'O' (Note: this is sensitive to X-rays!)
       'O': particles cross the outer 'O'pen-facing detector, provided
        they aren't deflected by the yoked magnet.
+
+    dataset: VALID ONLY FOR L1
+        string or tuple ('svy', 'arc', 'nse', 'hkp')
+        One per SEP sensor ('1', '2'), addressed as
+        s[1,2]_[svy,arc,nse,hkp] in the file.
+
     """
 
-    if not fields:
-        fields = ('time_unix', 'epoch',
-                  'attenuator_state',
-                  'accum_time',
-                  'raw_counts',
-                  'MAP_FTO', 'MAP_TID',
-                  'MAP_NRG_MEAS_AVG',
-                  'MAP_NRG_MEAS_DELTA')
+    if level == 'l2':
+        # Supply fields if not provided:
+        if not fields:
+            fields = ('time_unix', 'epoch',
+                      'attenuator_state',
+                      'accum_time',
+                      'raw_counts')
+            # "MAP_FTO", "MAP_TID", "MAP_NRG_MEAS_AVG",
+            # "MAP_NRG_MEAS_DELTA")
 
-    # Read the CDF data into a dict:
-    cdf_data = read_cdf(filename, fields, lib=lib)
+        # Read the CDF data into a dict:
+        cdf_data = read_cdf(filename, fields, lib=lib)
 
-    ctime_unx = cdf_data["time_unix"]
-    non_nan_index = (~np.isnan(ctime_unx))
-    cdf_data = process_data_dict(
-        cdf_data, conditional_array=non_nan_index)
+        if isinstance(sensors, tuple) and len(sensors) > 1:
+            raise IOError(
+                "Only one sensor can be read from L2,"
+                " please specify which one.")
 
-    # print(cdf_data["epoch"][:10])
-    # print(cdf_data["time_unix"][:10])
-    # print(np.isnan(cdf_data["time_unix"]))
+        # Index the raw_data
+        raw_data = {sensors: cdf_data}
 
-    # Map information: 256 bins
-    edeposit = cdf_data["MAP_NRG_MEAS_AVG"]
-    ebinwidth = cdf_data["MAP_NRG_MEAS_DELTA"]
-    detector_pattern_num = cdf_data["MAP_FTO"]
-    telescope_num = cdf_data["MAP_TID"]
+        time_var_name = "time_unix"
+        counts_var_name = "raw_counts"
+        att_var_name = "attenuator_state"
 
-    # N_time x 256 bins
-    raw_counts = cdf_data["raw_counts"]
-    att = cdf_data["attenuator_state"]
-    duration = cdf_data['accum_time']  # N accumulations per s
+    elif level == 'l1':
+        # Supply fields if not provided:
+        # if not fields:
+        #     if "svy" in dataset or "arc" in dataset:
+        #         # ['TIME', 'MET', 'ET', 'SUBSEC', 'F0', 'DELTA_TIME', 'TRANGE',
+        #         # 'SEQ_CNTR', 'DSEQCNTR', 'SENSOR', 'CCODE', 'MAPID', 'ATT',
+        #         # 'DURATION', 'COUNTS_TOTAL', 'RATE', 'CFACTOR', 'DATA',
+        #         # 'VALID']
+        #         fields = ["TIME", "DELTA_TIME", "DATA", "ATT"]
+        #     if "nse" in dataset:
+        #         fields = ["TIME", "DATA"]
 
-    # When the attenuator opens/closes, phony counts
-    # can be generated. Usually the time step before and after
-    # actuation is NaN'ed to remove this data.
-    if mask_atten_actuate:
-        atten_actuate = np.where(np.ediff1d(att) != 0)[0]
-        raw_counts[atten_actuate, :] = np.nan
-        raw_counts[atten_actuate + 1, :] = np.nan
+        # If dataset_type/detectors/telescopes is a string,
+        # convert into tuple
+        if isinstance(dataset, str):
+            dataset = (dataset,)
+        if isinstance(sensors, str):
+            sensors = (sensors,)
 
+        # L1 contains 19 structures, to wit:
+        # - s[1,2]_svy: data collected from survey telemetry
+        # - s[1,2]_arc: data collected from archive telemetry
+        # - s[1,2]_nse: measurement of floating ground for each
+        # detector (A-F,T,O and B-F,T,O).
+        # - s[1,2]_hkp: "housekeeping" data e.g. thermistor info
+        # - m[1,2]_hkp: housekeeping data from MAG (no idea why here)
+        # - ap[20,21,22,23,24]: housekeeping for PFP
+        # - misc description columns (sw_version, prereq_info, spice_info,
+        #   source_filename)
+        struc_names =\
+            ["s{}_{}".format(d_i, s) for (d_i, s) in
+             itertools.product(sensors, dataset)]
+        # print(struc_names, fields)
+
+        raw_data = read_sav(
+            filename, struct_name=struc_names, field_names=fields,
+            flatten_struct=False)
+
+        counts_var_name = "data"
+        time_var_name = "time"
+        att_var_name = "att"
+
+    if isinstance(data_unit, str):
+        data_unit = (data_unit,)
+
+    # Scrub the NaNs for the time axis of each
+    # dataset (as they have different commanding
+    # times).
+    for i in raw_data:
+        raw_data_i = raw_data[i]
+        ctime_unx = raw_data_i[time_var_name]
+        non_nan_index = (~np.isnan(ctime_unx))
+        raw_data_i = process_data_dict(
+            raw_data_i, time_var_name=time_var_name,
+            conditional_array=non_nan_index)
+
+        if level == "l1":
+            raw_data_i["epoch"] = UNX_to_UTC(raw_data_i[time_var_name])
+
+        if ("svy" in dataset or "arc" in dataset) and mask_atten_actuation:
+            # N_time x 256 bins
+            raw_counts = raw_data_i[counts_var_name]
+            att = raw_data_i[att_var_name]
+
+            # When the attenuator opens/closes, phony counts
+            # can be generated. Usually the time step before and after
+            # actuation is NaN'ed to remove this data.
+            atten_actuate = np.where(np.ediff1d(att) != 0)[0]
+            raw_counts[atten_actuate, :] = np.nan
+            raw_counts[atten_actuate + 1, :] = np.nan
+
+            raw_data_i[counts_var_name] = raw_counts
+
+        # print(raw_data_i.keys())
+
+        raw_data[i] = raw_data_i
+
+    # print("Raw data proc complete.")
     # input()
 
-    decompress_data = {}
+    # If translating the data into 'fto' or 'cal' units,
+    # need additional arguments:
 
-    for n in ['time_unix', 'epoch', 'attenuator_state']:
-        decompress_data[n] = cdf_data[n]
+    n_datasets = len(raw_data.keys())
+    data_dict = {}
 
-    # print(np.unique(telescope_num))
-    # print(np.unique(detector_pattern_num))
-    # print(t_ids, dp_ids)
+    # For each sensor:
+    for i in raw_data:
+        raw_data_i = raw_data[i]
+        # print(i, raw_data_i.keys())
+        # continue
 
+        # Iterate through the named categories in each sensor file:
+        data_dict_i = {}
+        for n in raw_data_i:
+            # print(i, n, raw_data_i[n].shape)
+            # print(type(raw_data_i[n]))
+            # input()
+
+            # Make a lower case version:
+            n_lower = n.lower()
+            if n_lower == "data":
+                n_lower = "raw_counts"
+            elif n_lower == "time":
+                n_lower = "time_unix"
+            elif n_lower == "att":
+                n_lower = "attenuator_state"
+
+            # I do not understand this line:
+            # if "raw" not in data_unit and \
+            #         ("time" not in n_lower and "epoch" not in n_lower):
+            #     continue
+
+            # Add unit to the data entry:
+            if include_unit:
+                if n_lower in units:
+                    unit_i = units[n_lower]
+                else:
+                    unit_i = ''
+                raw_data_ij = (raw_data_i[n], unit_i)
+            else:
+                raw_data_ij = raw_data_i[n]
+
+            data_dict_i[n_lower] = raw_data_ij
+
+        if 'fto' in data_unit or "cal" in data_unit:
+            # Returns counts by FTO pattern:
+            if level == "l2":
+                sensor_num = i
+            elif level == "l1":
+                sensor_num = i[1]
+
+            fto_dict_i = raw_to_fto(
+                raw_data_i, level=level,
+                sensors=sensor_num,
+                raw_data_unit='counts',
+                telescope=telescopes, detector=detector,
+                output_data=output_data,
+                include_unit=include_unit)
+            # print(fto_dict_i.keys())
+            # input()
+
+        if 'fto' in data_unit:
+            data_dict_i.update(fto_dict_i)
+
+        if "cal" in data_unit:
+            calib_dict_i = fto_to_calibrated(
+                fto_dict_i,
+                look_directions=look_directions,
+                particle=particle,
+                output_data=output_data,
+                include_unit=include_unit)
+            data_dict_i.update(calib_dict_i)
+
+        # If pulling more than one dataset or
+        # detector labeling enabled, change the key
+        # to refer to the detector.
+        if label_by_detector or n_datasets > 1:
+            for j in data_dict_i:
+                if len(dataset) > 1:
+                    precede_str_i = i
+                else:
+                    precede_str_i = i[1]
+                # print(precede_str_i)
+                new_label = "{}_{}".format(precede_str_i, j)
+                data_dict[new_label] = data_dict_i[j]
+        else:
+            data_dict = data_dict_i
+
+
+    # print("final:")
+    # for n in data_dict:
+    #     print(i, n, data_dict[n].shape)
     # input()
 
-    if not t_ids:
-        t_ids = np.unique(telescope_num)
-    else:
-        t_ids = [telescope.index(i.upper()) for i in t_ids]
-    if not dp_ids:
-        dp_ids = np.unique(detector_pattern_num)
-    else:
-        dp_ids = [l2_coincidence_groupings.index(i.upper()) for i in dp_ids]
-
-    # print(t_ids, dp_ids)
-
-    for t_id, dp_id in itertools.product(t_ids, dp_ids):
-        label = "{}-{}".format(
-            telescope[t_id], l2_coincidence_groupings[dp_id])
-
-        # Indices for subset in 256 bins
-        index_tid_pid = np.where(
-            (detector_pattern_num == dp_id) &
-            (telescope_num == t_id))[0]
-
-        # print(index_tid_pid.size)
-
-        if index_tid_pid.size != 0:
-
-            # Retrieve counts / E / dE
-            counts_tid_pid = raw_counts[:, index_tid_pid]
-            edeposit_tid_pid = edeposit[index_tid_pid]
-            decompress_data["{}_energy".format(label)] = edeposit_tid_pid
-
-            ewidth_tid_pid = ebinwidth[index_tid_pid]
-            decompress_data["{}_denergy".format(label)] = edeposit_tid_pid
-
-            # Calculate counts/sec
-            decompress_data["{}_counts".format(label)] = counts_tid_pid
-
-            # Calculate counts/sec
-            count_rate = counts_tid_pid/duration[:, np.newaxis]
-            decompress_data["{}_rates".format(label)] = count_rate
-
-            # #/s -> #/cm2/s/ster
-            # geom_factor_tid_pid = geom[att - 1]
-            geom_factor_tid_pid = np.where(att == 2, geom[1], geom[0])
-            flux = count_rate/ewidth_tid_pid[np.newaxis, :] /\
-                geom_factor_tid_pid[:, np.newaxis]/efficiency
-            decompress_data["{}_flux".format(label)] = flux
-
-    return decompress_data
+    return data_dict
 
 
 def cal_FOV_field_names(particle_names, look_dirs, field_names):
@@ -354,6 +451,7 @@ def cal_FOV_field_names(particle_names, look_dirs, field_names):
 def read_cal(filename, lib='cdflib', fields=None,
              energy_unit='eV',
              detector="", p=("elec", "ion"), ld=("r", "f"),
+             output_data=('flux',),
              label_by_detector=True, include_unit=True):
 
     """Return dict of SEP (e)fluxes, energy bins, attenuator state for
@@ -370,7 +468,8 @@ def read_cal(filename, lib='cdflib', fields=None,
 
     # Supply the field names
     if not fields:
-        fields = ["time_unix", "epoch", "attenuator_state", "energy", "flux"]
+        fields = ["time_unix", "epoch", "attenuator_state", "energy",
+                  "denergy", "flux"]
 
     # Each dataset with "energy" or "flux" in the name should
     # be expanded with the particle name (elec or ion)
