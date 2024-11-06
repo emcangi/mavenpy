@@ -190,10 +190,8 @@ def pileup_indices(x, y, z, reference="Trotignonetal2006_twoconics",
     return sheath_index, pileup_index, altitude
 
 
-def region_separation(x, y, z, arr):
-    '''Break array 'arr' (e.g. spacecraft altitude)
-    into solar wind / pileup / shadow
-    / sheath components based on spacecraft x, y, z.'''
+def region_index(x, y, z,
+                 region_names=('sw', 'sheath', 'pileup', 'shadow')):
 
     sw = solar_wind_indices(x, y, z)[0]
     shadow = shadow_indices(x, y, z)
@@ -202,16 +200,37 @@ def region_separation(x, y, z, arr):
     sheath = np.array([i for i in sheath if i not in sw])
     pileup = np.array([i for i in pileup if i not in shadow])
 
+    index_by_region = {}
+    if "sw" in region_names:
+        index_by_region["sw"] = sw
+    if "sheath" in region_names:
+        index_by_region["sheath"] = sheath
+    if "pileup" in region_names:
+        index_by_region["pileup"] = pileup
+    if "shadow" in region_names:
+        index_by_region["shadow"] = shadow
+
+    return index_by_region
+
+
+def region_separation(x, y, z, arr):
+    '''Break array 'arr' (e.g. spacecraft altitude)
+    into solar wind / pileup / shadow
+    / sheath components based on spacecraft x, y, z.'''
+
     region_names = ("sw", "sheath", "pileup", "shadow")
-    region_index = (sw, sheath, pileup, shadow)
+
+    index_by_region = region_index(x, y, z, region_names=region_names)
 
     arr_shape = arr.shape
     arr_dim = len(arr_shape)
 
     region_arr = {}
 
-    for name_i, index_i in zip(region_names, region_index):
+    for name_i in region_names:
         arr_i = np.zeros(shape=arr_shape) + np.nan
+
+        index_i = index_by_region[name_i]
 
         if arr_dim > 1:
             broadcast_index_i = helper.broadcast_index(
