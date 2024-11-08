@@ -301,7 +301,8 @@ if __name__ == "__main__":
 
     # Argument for providing the PFP username for download:
     parser.add_argument(
-        "--sprg_username", help="Username for PFP download.", required=True)
+        "--username",
+        help="Username for PFP download, only required if download enabled.")
 
     # Argument for controling whether or not to initiate download:
     parser.add_argument(
@@ -334,14 +335,23 @@ if __name__ == "__main__":
     dl_kernels = args.download
     dl_tohban = args.download
 
-    username = args.sprg_username
-    password = "{}_pfp".format(username)
 
-    data, plot_info = load_tohban(
-        local_data_directory=args.data_directory,
-        start_date=start, n_days=n_days, end_date=args.end_date,
-        data_files=args.data_file, download=dl_tohban,
-        sprg_username=username, sprg_password=password)
+    end = end - dt.timedelta(seconds=1)
+
+    if dl_tohban:
+        username = args.username
+        password = "{}_pfp".format(username)
+
+        data, plot_info = load_tohban(
+            local_data_directory=args.data_directory,
+            start_date=start, n_days=n_days, end_date=args.end_date,
+            data_files=args.data_file, download=dl_tohban,
+            sprg_username=username, sprg_password=password)
+    else:
+        data, plot_info = load_tohban(
+            local_data_directory=args.data_directory,
+            start_date=start, n_days=n_days, end_date=args.end_date,
+            data_files=args.data_file, download=dl_tohban)
     # input()
 
     plot_info_keys = list(plot_info.keys())
@@ -354,13 +364,16 @@ if __name__ == "__main__":
     print(plot_info_keys)
     print(data_keys)
 
-    tplot_names = plot_info["tplot_order"]
+    if "tplot_names" in plot_info_keys:
+        tplot_names = plot_info["tplot_order"]
+        # LPW IV data is always prelogged:
+        plot_info["mvn_lpw_iv"]["zscale"] = 'linear'
+        plot_info["mvn_lpw_iv"]["yscale"] = 'linear'
+
+    else:
+        tplot_names = ['mvn_sep1f_ion_eflux', 'mvn_sep1r_ion_eflux', 'mvn_sep1f_elec_eflux', 'mvn_sep1r_elec_eflux', 'mvn_sta_c0_e', 'mvn_sta_c6_m', 'mvn_swis_en_eflux', 'mvn_swe_etspec', 'mvn_lpw_iv', 'mvn_mag_bamp', 'mvn_mag_bang_1sec', 'alt2', 'burst_flag']
     print(tplot_names)
     # input()
-
-    # LPW IV data is always prelogged:
-    plot_info["mvn_lpw_iv"]["zscale"] = 'linear'
-    plot_info["mvn_lpw_iv"]["yscale"] = 'linear'
 
     if n_days and not end:
         end = start + dt.timedelta(days=n_days)
@@ -403,16 +416,21 @@ if __name__ == "__main__":
 
             # Plot the altitude:
             # Retrieve orbit ephemeris for this time period
+            k = spice.load_kernels(
+                args.data_directory,
+                start_date=start, end_date=end, n_days=n_days,
+                download_if_not_available=dl_kernels,
+                verbose=False,
+                prompt_for_download=False)
+            print("Kernels loaded.")
+            input()
+
             eph = anc.read_orbit_ephemeris(
                 args.data_directory,
                 start_date=start, end_date=end, n_days=n_days,
                 download_if_not_available=dl_kernels)
             print("Loaded ephemeris.")
-            k = spice.load_kernels(
-                args.data_directory,
-                start_date=start, end_date=end, n_days=n_days,
-                download_if_not_available=dl_kernels,
-                verbose=False)
+            input()
 
             sc_time_utc = helper.make_dt_range(
                 start, end_date=end, n_days=n_days,
@@ -505,6 +523,8 @@ if __name__ == "__main__":
         if plot_name_i == "mvn_mod_bcrust_amp":
             plot_i = {'ylabel': 'Morschhauser\n|B| [nT]', 'yscale': 'linear'}
         else:
+            if plot_name_i not in plot_info:
+                continue
             plot_i = plot_info[plot_name_i]
 
         # if isinstance(data_i, list):
@@ -646,10 +666,10 @@ if __name__ == "__main__":
 
         if plot_name_i in formatted_ylabels:
             new_ylabel = formatted_ylabels[plot_name_i]
-        # ax_i.set_ylabel(ylabel, rotation='horizontal',
-        #                 va='center', labelpad=35)
-        ax_i.set_ylabel(new_ylabel, rotation='horizontal',
-                        va='center', labelpad=35)
+            # ax_i.set_ylabel(ylabel, rotation='horizontal',
+            #                 va='center', labelpad=35)
+            ax_i.set_ylabel(new_ylabel, rotation='horizontal',
+                            va='center', labelpad=35)
 
     ax[-1].set_xlim(start, end)
 
@@ -658,6 +678,8 @@ if __name__ == "__main__":
     subplot_names = data["mvn_mag_bamp"]
 
     b_ax = ax[tplot_index]
+
+    b_ax.set_yscale('log')
 
     # bbox contains the
     # [x0 (left), y0 (bottom), x1 (right), y1 (top)] of the axis.
