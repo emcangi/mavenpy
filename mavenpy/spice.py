@@ -152,65 +152,6 @@ officially_archived_missions =\
      "stardust": "sdu-c", "akatsuki": "vco-v", "vex": "vex-e_v"}
 
 
-def download(filename, save_directory,
-             kernel_type=None, kernel_category=None,
-             kernel_subtype=None,
-             remote_url=None,
-             check_remote_for_updates=True,
-             mission_name=None,
-             max_chunk_size=1048576,
-             no_overwrite=True,
-             verbose=None,
-             session=None):
-
-    '''Download function for Spice kernels data on NAIF
-    filename: string, file to be downloaded
-    save_directory: where file is to be saved.
-    kernel_type: e.g. spk, pck, lsk
-    max_chunk_size: number of bytes read, above which
-        the file is chunked and written, else pulled at once.
-    '''
-
-    # Generate local file name
-    local_file = os.path.join(save_directory, filename)
-    local_exists = os.path.exists(local_file)
-
-    if local_exists and no_overwrite:
-        if verbose:
-            print("File already exists, set no_overwrite"
-                  " to False if wish to download again.")
-        return 0
-
-    # Access mission specific kernels (which are always in
-    # the 'kernels' subdirectory for the allcaps mission name)
-    # or load generic_kernels
-    if remote_url is None:
-        remote_url = spice_url(
-            kernel_category, kernel_type,
-            mission_name=mission_name,
-            kernel_subtype=kernel_subtype)
-
-    remote_url += '/{file}'.format(
-        kernel_id=kernel_type, file=filename)
-
-    # If local copy exists and comparing to remote
-    # to look for updates, see if updated and download,
-    # else exit.
-    if local_exists and check_remote_for_updates:
-        x = retrieve.remote_file_updated(
-            remote_url, local_file, verbose=verbose,
-            session=session)
-        if not x:
-            return 0
-
-    # Download:
-    retrieve.download_file(
-        remote_url, local_file, chunk_size=max_chunk_size,
-        session=session)
-
-    return 1
-
-
 def get_kernel_subfolder(group):
     '''
     group: string, the group of kernels that are
@@ -541,7 +482,8 @@ def retrieve_kernels(data_directory, kernel_group, kernel_name,
                      ck_platform=None, spk_ext='bsp',
                      use_most_recent=None, mirror_spedas_dir_tree=True,
                      session=None,
-                     verbose=None):
+                     verbose=None,
+                     prompt_for_download=True):
 
     '''Returns a local filename of the generic kernel.
     If it doesn't exist or is created before an update
@@ -648,8 +590,11 @@ def retrieve_kernels(data_directory, kernel_group, kernel_name,
             # If it is the same, compare to remote and see if updated.
             # If it hasn't been, proceed to next.
             # if verbose:
-            print('Download: ', remote_filename_i)
-            input("Hit enter to allow download:")
+
+            # Provide a prompt:
+            if prompt_for_download:
+                print('Download: ', remote_filename_i)
+                input("Hit enter to allow download:")
 
             # If the remote file has been modified since
             # the local file has been present (or never
@@ -853,7 +798,8 @@ def MAVEN_kernels(data_directory, kernels, kernel_groups,
                   download_if_not_available=True,
                   session=None, verbose=None,
                   mirror_spedas_dir_tree=True,
-                  spk_ext='bsp'):
+                  spk_ext='bsp',
+                  prompt_for_download=True):
 
     """Routine to list/download MAVEN-relevant SPICE kernels into memory.
     This will need to be reduced for the specific relevant Spice kernels."""
@@ -894,7 +840,8 @@ def MAVEN_kernels(data_directory, kernels, kernel_groups,
             start_date=start_dt, end_date=end_dt,
             verbose=verbose,
             spk_ext=spk_ext, ck_platform=ck_platform,
-            mirror_spedas_dir_tree=mirror_spedas_dir_tree)
+            mirror_spedas_dir_tree=mirror_spedas_dir_tree,
+            prompt_for_download=prompt_for_download)
 
         kernel_filepath += kernel_filepath_i
 
@@ -913,7 +860,8 @@ def load_kernels(data_directory,
                  load_spacecraft=True,
                  load_spacecraft_pointing=True,
                  load_APP=False,
-                 spk_ext=("bsp", "orb")):
+                 spk_ext=("bsp", "orb"),
+                 prompt_for_download=True):
 
     '''Downloads or retrieves MAVEN-relevant Spice kernels via Spiceypy
     and furnsh.
@@ -955,7 +903,8 @@ def load_kernels(data_directory,
         start_dt=start_dt, end_dt=end_dt,
         download_if_not_available=download_if_not_available,
         mirror_spedas_dir_tree=mirror_spedas_dir_tree,
-        verbose=verbose)
+        verbose=verbose,
+        prompt_for_download=prompt_for_download)
 
     # Remove any null strings:
     k = [i for i in k if i]
