@@ -16,6 +16,62 @@ from . import specification
 # Requires requests, bs4, html5lib
 
 
+class AuthError(Exception):
+    pass
+
+
+class NotFound(Exception):
+    pass
+
+
+def verify_url(url, session=None, username='', password='',
+               verbose=False):
+
+    '''Verify if URL is accessible, and raises AuthError
+    if we lack username/password or NotFound if 404'''
+
+    # auth = (username, password)
+    if session is None:
+        req = requests
+    else:
+        req = session
+    # print(session.auth)
+    # print(auth)
+    # response = req.get(url, auth=auth)
+    response = req.head(url, allow_redirects=True)
+    status = response.status_code
+
+    if verbose:
+        print("Root URL: ", url, ", status code:", status)
+
+    # input()
+
+    if status < 300:
+        return
+
+    if status == 401:
+        # 401 Unauthorized
+        if not username:
+            if session is not None:
+                session.close()
+            raise AuthError(
+                "Need authentication to access '{url}'."
+                " Supply username and password.".format(
+                    url=url))
+        else:
+            if session is not None:
+                session.close()
+            raise AuthError(
+                "Username '{}'' and password '' failed to"
+                " access '{}'. Check your credentials.".format(url))
+
+    elif status == 404:
+        # 404 Not Found
+        raise NotFound("URL does not exist: {}".format(url))
+    else:
+        print("Unknown response code: {}".format(status))
+
+
 def fix_filename_version(filename, v_number=None, r_number=None):
 
     '''This function determines if the supplied version number
@@ -56,7 +112,8 @@ def sdc_retrieve(instrument, destination_dir='',
                  level="l2", dataset_name="", ext="", res="", coord="",
                  source="ssl_sprg", username="", password="",
                  v_number=None, r_number=None,
-                 verbose=None):
+                 verbose=None,
+                 prompt_for_download=False):
 
     '''
     Routine to download MAVEN data from lasp.colorado.edu/maven/sdc
@@ -189,10 +246,101 @@ def sdc_retrieve(instrument, destination_dir='',
     if verbose:
         print("Session opened, iterating through yyyy/mm...")
 
+    # Check if url / source is reachable:
+    url_root = "/".join((remote_domain, *source_folder_root))
+    verify_url(url_root, session=session, verbose=verbose)
+
+    # Organize the file paths by yyyy/mm since all datasets in SDC/SPRG
+    # filed by that in the root dir:
     for filedir_tuple in unique_file_paths:
+
+        # If file dir tuple has yyyy in it, want to see if
+        # the URL up to that point exists:
+        yyyy_str = '{yyyy}'
+        mm_str = '{mm}'
+        if yyyy_str not in filedir_tuple:
+            yyyy_index = len(filedir_tuple)
+        else:
+            yyyy_index = filedir_tuple.index(yyyy_str)
+
+        # check if url / source up to the yyyy info is reachable:
+        base_url_i = "/".join((url_root, *filedir_tuple[:yyyy_index]))
+        verify_url(base_url_i, session=session, verbose=verbose)
+
+        # Check to see if folders for the requested years are on remote:
+        if yyyy_str in filedir_tuple:
+            # Make the url up to the year:
+            yyyy_url = "/".join((url_root, *filedir_tuple[:(yyyy_index + 1)]))
+
+            # If year in url, get all unique years in the requested dt_range:
+            uniq_years = set([i.strftime("%Y") for i in dt_range])
+            # Iterate over to see if the URLs for each exists:
+            avail_years = []
+            for yyyy_i in uniq_years:
+                yyyy_url_i = yyyy_url.format(yyyy=yyyy_i)
+                # print(yyyy_url_i)
+                try:
+                    verify_url(yyyy_url_i, session=session, verbose=verbose)
+                    avail_years.append(yyyy_i)
+                except NotFound:
+                    pass
+
+            # Restrict the dt range to available years:
+            dt_range = [i for i in dt_range if i.strftime("%Y") in avail_years]
+            if verbose:
+                if len(dt_range) == 0:
+                    print("No data available in requested years.")
+                else:
+                    print("Data available between ",
+                          dt_range[0].strftime("%Y-%m-%d"),
+                          " and ", dt_range[-1].strftime("%Y-%m-%d"))
+
+        # See if the yyyy/mm folders exist on remote,
+        # and restrict the searched time range to when files are available.
+        if mm_str in filedir_tuple:
+            # Make the url up to the year and month:
+            yyyy_mm_url = "/".join((url_root, *filedir_tuple))
+
+            # If year in url, get all unique years in the requested dt_range:
+            uniq_year_months = set(
+                [(i.strftime("%Y"), i.strftime("%m")) for i in dt_range])
+            # print(uniq_year_months)
+
+            avail_yearmonth = []
+            for (yyyy_i, mm_i) in uniq_year_months:
+                yyyy_mm_url_i = yyyy_mm_url.format(yyyy=yyyy_i, mm=mm_i)
+                # print(yyyy_mm_url_i)
+                try:
+                    verify_url(yyyy_mm_url_i, session=session, verbose=verbose)
+                    avail_yearmonth.append((yyyy_i, mm_i))
+                except NotFound:
+                    pass
+
+            # Restrict the dt range to available years:
+            dt_range = [i for i in dt_range if
+                        (i.strftime("%Y"), i.strftime("%m"))
+                        in avail_yearmonth]
+            if verbose:
+                if len(dt_range) == 0:
+                    print("No data available in requested period.")
+                else:
+                    print("Data available between ",
+                          dt_range[0].strftime("%Y-%m-%d"),
+                          " and ",
+                          dt_range[-1].strftime("%Y-%m-%d"))
+
+        # If no datetimes remain after the removal, no files to retrieve,
+        # abort here.
+        if not dt_range:
+            print("No data available {} to {}.".format(start_date, end_date))
+            session.close()
+            return
+
         # Make the format string for the dataset url:
-        remote_url_fstring = "/".join(
-            (remote_domain, *source_folder_root, *filedir_tuple))
+        remote_url_fstring = "/".join((url_root, *filedir_tuple))
+
+        # print(remote_url_fstring)
+        # input()
 
         destination_dir = os.path.join(local_root_dir, *filedir_tuple)
 
@@ -204,7 +352,6 @@ def sdc_retrieve(instrument, destination_dir='',
         folder_filename_dict = {}
 
         # Get regexes for files:
-
         filename_regex = unique_file_paths[filedir_tuple]
 
         # print(filedir_tuple)
@@ -252,15 +399,15 @@ def sdc_retrieve(instrument, destination_dir='',
 
         # print(folder_filename_dict)
         # input()
-
         for url_i in folder_filename_dict:
-            info_i = folder_filename_dict[url_i]
-            filenames_i = info_i['filename']
-            destination_i = info_i['destination']
 
             if verbose:
                 print("URL: {}".format(url_i))
                 # print('{}/{}:'.format(*yyyy_mm_i))
+
+            info_i = folder_filename_dict[url_i]
+            filenames_i = info_i['filename']
+            destination_i = info_i['destination']
 
             # Get the HTML of the URL, formatted
             # as a "BeautifulSoup object":
@@ -328,12 +475,13 @@ def sdc_retrieve(instrument, destination_dir='',
                                   if i not in local_copy_ij]
                 if verbose:
                     print('files only on remote: ', only_on_remote)
-                    input("hit enter to continue")
 
                 # Download the file(s) if they are not available locally:
                 if only_on_remote:
                     if verbose:
                         print("Remote file newer than local, downloading:")
+                    if prompt_for_download:
+                        input("hit enter to continue")
 
                     for only_on_remote_i in only_on_remote:
                         only_on_remote_url_i = "/".join((url_i, only_on_remote_i))
