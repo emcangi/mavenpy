@@ -24,6 +24,8 @@ if __name__ == "__main__":
         help="Directory containing MAVEN data.",
         required=True
     )
+
+    # Keywords for start/end time, or number of days, or the orbit #.
     parser.add_argument(
         "--start",
         help="Start of MAVEN plot timeframe (YYYY-MM-DD HH:MM:SS).",
@@ -34,25 +36,35 @@ if __name__ == "__main__":
         help="End of MAVEN plot timeframe (YYYY-MM-DD HH:MM:SS).",
         type=str,
     )
-
+    parser.add_argument(
+        "--n_days",
+        help="Number of days of data retrieved.",
+        type=int,
+    )
     parser.add_argument(
         "--orbit_number",
         help="MAVEN orbit number.",
         type=float
     )
 
+    # Keyword to download NAIF files:
     parser.add_argument(
         "--download",
         help="Download NAIF files to data_directory if not found.",
         action="store_true",
     )
 
+    # Keyword controlling # of points plotted:
     parser.add_argument(
-        "--plot_b",
-        help="Add contours for Br.",
-        action="store_true",
+        "--n_points",
+        help="Number of points plotted.",
+        type=int,
+        default=500,
     )
 
+    # Optional plot keywords:
+    parser.add_argument(
+        "--plot_b", help="Add contours for Br.", action="store_true")
     parser.add_argument(
         "--plot_path_color",
         help="Color the path by progressing time.",
@@ -62,7 +74,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     default_xyzlim = [-3, 3]
-    N = 500
+    N = args.n_points
     axis_color = '0.75'
     # axis_color = '0.925'
 
@@ -74,15 +86,15 @@ if __name__ == "__main__":
     if args.orbit_number:
         eph = anc.read_orbit_ephemeris(
             data_directory,
-            start_date='2014 12 1', end_date='2024 7 1',
-            download_if_not_available=True)
+            start_date='2014 12 1', end_date=dt.datetime.now(),
+            download_if_not_available=args.download)
         onum = [args.orbit_number - 0.5, args.orbit_number + 0.5]
         start, end = anc.orbit_num(ephemeris=eph, orbit_num=onum)
     else:
-        start = parse(args.start)
-        end = parse(args.end)
+        start, n_days, end = helper.sanitize_date_inputs(
+            start_date=args.start, n_days=args.n_days, end_date=args.end)
 
-    print(start, end)
+    # print(start, end)
 
     k = spice.load_kernels(
         data_directory,
@@ -106,8 +118,29 @@ if __name__ == "__main__":
         lonalt_color_i = 'r'
         lonlat_color_i = 'b'
 
+    # Spacecraft alttitude, latitude, longitude:
     alt, lat, lon = coordinates.cartesian_to_geographic(
         x_geo, y_geo, z_geo)
+
+    # Get the periapse indices:
+    below_alt = np.where(alt < 200)[0]
+    # print(below_alt)
+    alt_edges = np.where(np.abs(np.ediff1d(below_alt)) > 1)[0]
+    # print(alt_edges)
+    alt_edges = np.append(alt_edges, len(below_alt) - 1)
+    alt_edges = np.insert(alt_edges + 1, 0, 0).astype("int")
+    periapse_index = []
+
+    for a_l, a_h in zip(alt_edges[:-1], alt_edges[1:]):
+        alt_lh = alt[below_alt[a_l:a_h]]
+        # print(below_alt[a_l:a_h])
+        # print(alt_lh)
+        periapse_i = below_alt[a_l] + np.argmin(alt_lh)
+        periapse_index.append(periapse_i)
+        # print(alt[below_alt[alt_edges]])
+
+    # print(periapse_index)
+    # input()
 
     # mso_spline = mars_shape_conics.cartesian_spline(
     #     sc_time_unx, sc_x_mso, sc_y_mso, sc_z_mso)
@@ -157,10 +190,16 @@ if __name__ == "__main__":
         index = ((np.sqrt(plot_x**2 + plot_y**2) < 1) & (plot_z > 0))
         # print(index)
 
-        ax_i.scatter(plot_x[~index], plot_y[~index], c=color_i[~index],
-                     marker='.', s=4)
-        ax_i.scatter(plot_x[index], plot_y[index], c=color_i[index],
-                     marker='.', s=0.1)
+        if args.plot_path_color:
+            ax_i.scatter(plot_x[~index], plot_y[~index], c=color_i[~index],
+                         marker='.', s=4)
+            ax_i.scatter(plot_x[index], plot_y[index], c=color_i[index],
+                         marker='.', s=0.1)
+        else:
+            ax_i.scatter(plot_x[~index], plot_y[~index], c=color_i,
+                         marker='.', s=4)
+            ax_i.scatter(plot_x[index], plot_y[index], c=color_i,
+                         marker='.', s=0.1)
 
         ax_i.set_aspect("equal")
         ax_i.set_xlim(default_xyzlim)
@@ -206,6 +245,15 @@ if __name__ == "__main__":
     wrapped_indices = np.where(np.abs(np.ediff1d(lon)) > 180)[0]
     wrapped_indices = np.append(wrapped_indices, len(lon) - 1)
 
+    ax_r.scatter(
+        lon[periapse_index], lat[periapse_index],
+        color=lonlat_color_i, marker='x', zorder=10)
+    ax_r2.scatter(
+        lon[periapse_index], alt[periapse_index],
+        color=lonalt_color_i, marker='x', zorder=10)
+
+    # plt.show()
+
     # input()
     if len(wrapped_indices) == 0:
         ax_r.scatter(lon, lat, color=lonlat_color_i, s=3, marker='.', zorder=2)
@@ -217,18 +265,15 @@ if __name__ == "__main__":
             lat_i = lat[init_index:(wrap_index + 1)]
             alt_i = alt[init_index:(wrap_index + 1)]
 
-            if isinstance(lonlat_color_i, Iterable):
-                lonlat_color_j = lonlat_color_i[init_index:(wrap_index + 1)]
-            else:
-                lonlat_color_j = lonlat_color_i
-
-            if isinstance(lonlat_color_i, Iterable):
+            if args.plot_path_color:
                 lonalt_color_j = lonalt_color_i[init_index:(wrap_index + 1)]
-            else:
-                lonalt_color_j = lonalt_color_i
+                lonlat_color_j = lonlat_color_i[init_index:(wrap_index + 1)]
+                ax_r.scatter(lon_i, lat_i, color=lonlat_color_j, s=3, marker='.', zorder=2)
+                ax_r2.scatter(lon_i, alt_i, color=lonalt_color_j, s=3, marker='.', zorder=2)
 
-            ax_r.scatter(lon_i, lat_i, color=lonlat_color_j, s=3, marker='.', zorder=2)
-            ax_r2.scatter(lon_i, alt_i, color=lonalt_color_j, s=3, marker='.', zorder=2)
+            else:
+                ax_r.scatter(lon_i, lat_i, c=lonlat_color_i, s=3, marker='.', zorder=2)
+                ax_r2.scatter(lon_i, alt_i, c=lonalt_color_i, s=3, marker='.', zorder=2)
             init_index = wrap_index + 1
 
     ax_r.set_aspect('equal')
