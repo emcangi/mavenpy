@@ -77,7 +77,8 @@ if __name__ == "__main__":
             'swia', destination_dir=data_directory,
             username=username, password=password,
             dataset_name='onboardsvymom', ext='cdf', level='l2',
-            start_date=start_date, end_date=end_date)
+            start_date=start_date, end_date=end_date,
+            verbose=True)
         print("SWIA files updated.")
 
     swim_file_names = file_path.local_file_names(
@@ -87,23 +88,34 @@ if __name__ == "__main__":
     swia_moments = load.load_data(swim_file_names)
 
     # Get MAG file names / load the MAG data
-    mag_ext = 'sav'
-    mag_res = '30sec'
-    mag_level = 'l2'
     mag_coord = 'pl'
 
-    if args.download:
-        retrieve.sdc_retrieve(
-            'mag', destination_dir=data_directory,
-            username=username, password=password,
-            ext=mag_ext, res=mag_res, level=mag_level, coord=mag_coord,
-            start_date=start_date, end_date=end_date)
-        print("MAG files updated.")
-    mag_file_names = file_path.local_file_names(
-        data_directory, 'mag', start_date=start_date, end_date=end_date,
-        ext=mag_ext, res=mag_res, level=mag_level, coord=mag_coord, source='ssl_sprg')
+    for mag_ext, mag_res, mag_level in zip(('sav', 'sav'), ('30sec', '1sec'), ('l2', 'l1')):
+        if args.download:
+            retrieve.sdc_retrieve(
+                'mag', destination_dir=data_directory,
+                username=username, password=password,
+                ext=mag_ext, res=mag_res, level=mag_level, coord=mag_coord,
+                start_date=start_date, end_date=end_date)
+            print("MAG files updated.")
+
+        try:
+            mag_file_names = file_path.local_file_names(
+                data_directory, 'mag', start_date=start_date, end_date=end_date,
+                ext=mag_ext, res=mag_res, level=mag_level, coord=mag_coord,
+                source='ssl_sprg',)
+        except IOError:
+            continue
+
+        actual_mag_files = [i for i in mag_file_names if i]
+
+        if len(actual_mag_files) != 0:
+            break
+
     mag = load.load_data(
-        mag_file_names, ext='sav', res='30sec', level='l2', coord='pl')
+        mag_file_names, ext=mag_ext, res=mag_res,
+        level=mag_level, coord=mag_coord)
+
     mag_epoch = mag["epoch"][0]
     bx = mag["Bx"][0]
     by = mag["By"][0]
