@@ -301,7 +301,8 @@ def sanitize_date_inputs(start_date=None, n_days=None, end_date=None,
         raise ValueError("Need either n_days or an end_date.")
 
     if not end_date:
-        end_date = start_date + dt.timedelta(days=(n_days - 1))
+        # end_date = start_date + dt.timedelta(days=(n_days - 1))
+        end_date = start_date + dt.timedelta(days=n_days)
 
     end_date = date_to_dt(end_date, default=default_end_date)
 
@@ -314,7 +315,6 @@ def sanitize_date_inputs(start_date=None, n_days=None, end_date=None,
     if not n_days:
         n_days = 1 + (end_date - start_date).days
 
-    # print(start_date, end_date)
     return start_date, n_days, end_date
 
 
