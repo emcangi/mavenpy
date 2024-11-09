@@ -15,16 +15,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "-d", "--data_directory",
         help="Directory containing MAVEN SEP data.",
+        required=True
     )
     parser.add_argument(
         "--start",
         help="Start day of MAVEN SEP data (YYYY-MM-DD HH:MM:SS).",
-        type=str
+        type=lambda s: dt.datetime.strptime(s, "%Y-%m-%d"),
+        required=True,
     )
     parser.add_argument(
         "--end",
         help="End day of MAVEN SEP data (YYYY-MM-DD HH:MM:SS).",
-        type=str,
+        type=lambda s: dt.datetime.strptime(s, "%Y-%m-%d"),
+        required=True,
     )
 
     parser.add_argument(
@@ -145,7 +148,9 @@ if __name__ == "__main__":
         default=False,
         action='store_true',
     )
-    parser.add_argument("--username", help="Username to download from remote.")
+    parser.add_argument(
+        "--username", help="Username to download from remote.",
+        default='')
 
     parser.add_argument(
         "--verbose", help="Enable debugging messages for retrieve.",
@@ -160,11 +165,6 @@ if __name__ == "__main__":
         data_directory = args.data_directory
 
     remote_source = args.remote
-
-    # Username
-    if args.username and remote_source == "ssl_sprg":
-        username = args.username
-        password = "{}_pfp".format(username)
 
     # Parse args on details:
     level = args.level
@@ -229,6 +229,13 @@ if __name__ == "__main__":
 
     # Do the download:
     if args.download:
+
+        # Username
+        username = args.username
+        password = ''
+        if args.username and remote_source == "ssl_sprg":
+            password = "{}_pfp".format(username)
+
         retrieve.sdc_retrieve(
             'sep', destination_dir=data_directory,
             level=level, ext=ext,
