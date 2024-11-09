@@ -397,17 +397,15 @@ def filename(instrument_tla, level="2", dataset_name=None, ext=None,
         data_name = raw_pfp_name.format(data=dataset_name)
     elif instrument_tla == "sep" and level == 'l1':
         data_name = sep_l1_name
-    elif instrument_tla == "sta":
-        if "iv" in level:
-            data_name = sta_iv_name.format(
-                dataset_name=dataset_name, iv_num=level)
-        elif "l3" in level:
-            short = sta_l3_short_name[dataset_name]
-            # if res = 'gwen' or 'full':
-            if res:
-                res = "_{}".format(res)
-            data_name = sta_l3_name.format(
-                short_name=short, res=res, ext=ext)
+    elif instrument_tla == "sta" and "iv" in level:
+        data_name = sta_iv_name.format(
+            dataset_name=dataset_name, iv_num=level)
+    elif instrument_tla == "sta" and "l3" in level:
+        short = sta_l3_short_name[dataset_name]
+        # if res = 'gwen' or 'full':
+        if res:
+            res = "_{}".format(res)
+        data_name = sta_l3_name.format(short_name=short, res=res, ext=ext)
 
     elif instrument_tla in file_per_orbit:
         data_name = hourly_name.format(
