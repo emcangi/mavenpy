@@ -4,7 +4,6 @@ from collections.abc import Iterable
 import itertools
 
 from dateutil.parser import parse
-# import calendar
 
 #########################################
 #           Helper routines             #
@@ -442,29 +441,6 @@ def rolling_sum(time_s, data, dt, skip=None):
     return new_epoch, new_t, new_f
 
 
-def add_colorbar_outside(im, fig, ax, colorbar_width=0.01,
-                         margin=0.01, **kwargs):
-
-    '''Makes a colorbar that is located just outside of an existing axis
-    (useful for multipanel comparison)'''
-
-    # Based on StackOverflow post here:
-    # https://stackoverflow.com/questions/71500468/positioning-multiple-colorbars-outside-of-subplots-matplotlib
-
-    # Get bounding box that marks the boundaries of the axis:
-    # [x0 (left), y0 (bottom), x1 (right), y1 (top)] of the axis.
-    bbox = ax.get_position()
-
-    # [left most position, bottom position, width, height] of color bar.
-    cax = fig.add_axes(
-        [bbox.x1 + margin, bbox.y0, colorbar_width, bbox.height])
-
-    # Add colorbar using the new axis:
-    cbar = fig.colorbar(im, cax=cax, **kwargs)
-
-    return cbar
-
-
 def continuous_index_interval(indices):
     '''Given a list of indices to access an array,
     identifies gaps, sorts the index by gaps,
@@ -499,8 +475,9 @@ def continuous_index_interval(indices):
     return start_index, end_index
 
 
-def broadcast_index(array_nd, array_1d, matching_axis_index=Ellipsis,
-                    other_axis_index=np.newaxis):
+def broadcast_index(array_nd, array_md, matching_axis_index=Ellipsis,
+                    other_axis_index=np.newaxis,
+                    raise_if_over_1d=True):
 
     '''For a given 1D array (array_1d) that describes a single axis of
     a multidimensional array (array_nd), determine which axis index that
@@ -518,45 +495,62 @@ def broadcast_index(array_nd, array_1d, matching_axis_index=Ellipsis,
 
     '''
 
-    # Check if array ND actually an ND array:
-    if not isinstance(array_nd, np.ndarray):
-        raise ValueError(
-            "Must provide multidimensional numpy array to"
-            " determine broadcast index over.")
+    # Check if provided array ND is the shape or array.
+    # If neither, raises an error, otherwise converts an array into
+    # the shape:
+    if not isinstance(array_nd, tuple):
+        if isinstance(array_nd, np.ndarray):
+            return broadcast_index(
+                array_nd.shape, array_md, matching_axis_index=Ellipsis,
+                other_axis_index=np.newaxis)
+        else:
+            raise ValueError(
+                "Must provide multidimensional numpy array to"
+                " determine broadcast index over.")
 
-    # Check if array 1D is a flat iterable:
-    # First, convert into a numpy array if not provided:
-    if isinstance(array_1d, Iterable) and not isinstance(array_1d, np.ndarray):
-        array_1d = np.array(array_1d)
+    # Next, check if array 1D is an integer representing
+    # the array. Otherwise, if it is a flat iterable, convert into
+    # a numpy array and get the length:
+    if isinstance(array_md, Iterable) and not isinstance(array_md, tuple):
+        if not isinstance(array_md, np.ndarray):
+            array_md = np.array(array_md)
+        # Next, flatten and get shape:
+        array_md = array_md.flatten()
 
-    # Next, flatten and get shape:
-    array_1d = array_1d.flatten()
-    array_1d_shape = array_1d.shape
+        return broadcast_index(
+            array_nd.shape, array_md.shape,
+            matching_axis_index=Ellipsis,
+            other_axis_index=np.newaxis)
 
     # If array 1D has more than one dimension, raise error:
-    if len(array_1d_shape) > 1:
-        raise ValueError(
-            "array_1d must be 1-dimensional, "
-            "received array_1d with more that 1D.")
-
-    n_array_1d = array_1d.size
-    matching_index_found = False
-
-    # print(array_nd.shape, array_1d.shape)
+    if raise_if_over_1d:
+        if len(array_md) > 1:
+            raise ValueError(
+                "array_md must be 1-dimensional or a tuple with one element, "
+                "received array_md with n-dimensions or tuple with more elements."
+                " If this is okay, set raise_if_over_1d to False.")
+        # Iterate through each to see if duplicates:
+        for m in array_md:
+            test_m = sum([1 for i in array_nd if i == m])
+            if test_m > 1:
+                raise ValueError(
+                    "Multiple matching array lengths in array_nd,"
+                    " exiting.")
 
     selection_tuple = []
-    for ax_index, ax_length in enumerate(array_nd.shape):
-        if ax_length == n_array_1d:
-            if matching_index_found:
-                raise ValueError(
-                    "Multiple matching array lengths found"
-                    " in ND array, exiting...")
+    axis_index = []
+    for ax_index, ax_length in enumerate(array_nd):
+        if ax_length in array_md:
             selection_tuple.append(matching_axis_index)
-            axis_index = ax_index
-            matching_index_found = True
+            axis_index.append(ax_index)
         else:
             selection_tuple.append(other_axis_index)
     selection_tuple = tuple(selection_tuple)
+
+    if len(axis_index) > 1:
+        axis_index = tuple(axis_index)
+    else:
+        axis_index = axis_index[0]
 
     return axis_index, selection_tuple
 
@@ -576,3 +570,24 @@ def subset_arr(data_i, condition_index, N):
         matching_data_i = data_i
 
     return matching_data_i
+
+
+def subset_window(time_unix, time_windows_dt):
+    '''Make an array of indices to access multiple
+    narrow time windows.'''
+
+    new_index = []
+    for (dt_i, dt_f) in time_windows_dt:
+        start = find_closest_index_dt(dt_i, time_unix)
+        end = find_closest_index_dt(dt_f, time_unix)
+
+        i_if = np.arange(start, end - 0.1, 1).astype(int)
+        # print(start, end)
+        # print(i_if)
+        # input()
+        new_index.append(i_if)
+
+    # Concatenate all matching indices together:
+    new_index = np.concatenate(new_index)
+
+    return new_index
