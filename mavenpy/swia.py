@@ -7,6 +7,16 @@ from .read import read_cdf
 from . import helper
 
 
+# Pers. comm. (11/16/24): theta_atten_fine/coarse and theta_fine/coarse
+# are currently equal in the Level 2 CDFs in many SWIA files,
+# and there is no point to loading it as well.
+# This was confirmed by PI Jasper Halekas via email.
+# He says the field was introduced since the optical simulations
+# suggested there might be some differences, but he found
+# optimal performance by setting theta_fine = theta_atten_fine
+# and theta_coarse = theta_atten_coarse.
+
+
 swia_units =\
     {"time_unix": "s, POSIX seconds after 1970", "epoch": "utc",
      "density": "#/cm3",
@@ -48,7 +58,7 @@ swia_units =\
 
 
 def uncompress(uncompressed_dim, index_arrs, compressed_arr,
-               iterate_over_time=None, iterate_over_index=None):
+               iterate_over='time'):
 
     '''Expand a compressed array that has a time-varying
     start index in a larger array.
@@ -59,62 +69,44 @@ def uncompress(uncompressed_dim, index_arrs, compressed_arr,
     '''
     N = compressed_arr.shape[0]
     compressed_dim = compressed_arr.shape[1:]
+    uncompressed_arr = np.zeros(shape=(N, *uncompressed_dim))
     # print(uncompressed_arr.shape, compressed_arr.shape)
 
-    if iterate_over_time:
+    if iterate_over == 'time':
         # Basic for loop:
         # Iterating over time
-        uncompressed_arr = np.zeros(shape=(N, *uncompressed_dim))
         for i in range(N):
             index_i = [i]
             for index_arr, len_i, in zip(index_arrs, compressed_dim):
-                if index_arr is "None":
-                    index_i.append(slice(None))
-                else:
-                    i_i = index_arr[i]
-                    i_f = i_i + len_i
-                    index_i.append(slice(i_i, i_f))
+                i_i = index_arr[i]
+                i_f = i_i + len_i
+                index_i.append(slice(i_i, i_f))
             uncompressed_arr[tuple(index_i)] = compressed_arr[i, ...]
-    elif iterate_over_index:
+    elif iterate_over == 'index':
         # Inverted for loop:
-        uncompressed_arr = np.zeros(shape=(N, *uncompressed_dim))
-
-        non_none_index = [i for i in index_arrs if i is not "None"]
-        non_none_dim =\
-            [j for (i, j) in zip(index_arrs, uncompressed_dim)
-             if i is not "None"]
-
-        aggregate_index_arr = non_none_index[0]*1
-        for n_i, index_arr in zip(non_none_dim[:-1], non_none_index[1:]):
-            # print(n_i, max(index_arr), min(index_arr))
+        # Make a mapping of the unique indices to the actual indices,
+        # using the dictionary to organize by unique items:
+        mapping = {}
+        for time_index, i in enumerate(zip(*index_arrs)):
+            # print(j, i)
+            if i in mapping:
+                mapping[i].append(time_index)
+            else:
+                mapping[i] = [time_index]
             # input()
-            aggregate_index_arr = n_i*aggregate_index_arr + index_arr
-            # print(aggregate_index_arr.shape, min(aggregate_index_arr),
-            #       max(aggregate_index_arr))
 
-        unique_index = np.unique(aggregate_index_arr)
-
-        for index_i in unique_index:
-            time_index_i = np.where(aggregate_index_arr == index_i)[0]
-            N_time_index = len(time_index_i)
-
-            if N_time_index != 0:
-
-                subset_i = compressed_arr[time_index_i, ...]
-
-                index = [time_index_i]
-
-                for index_arr, n_c in zip(index_arrs, compressed_dim):
-                    if index_arr is "None":
-                        slice_i = slice(None)
-                    else:
-                        n_index_arr = index_arr[time_index_i]
-                        n_index = n_index_arr[0]
-                        slice_i = slice(n_index, n_index + n_c)
-                    index.append(slice_i)
-
-                index = tuple(index)
-                uncompressed_arr[index] = subset_i
+        # Iterate over unique indices and fill those:
+        for unique_index in mapping:
+            # Get the time indexes for that mapping:
+            time_index_i = mapping[unique_index]
+            # print(unique_index, compressed_dim)
+            # input()
+            subset_i = compressed_arr[time_index_i, ...]
+            index = [time_index_i] +\
+                [slice(i, i + n_c) for i, n_c in zip(
+                    unique_index, compressed_dim)]
+            index = tuple(index)
+            uncompressed_arr[index] = subset_i
 
     return uncompressed_arr
 
@@ -174,7 +166,7 @@ def read(file_path, dataset_type="None", fields=None, lib='cdflib',
                           "diff_en_fluxes", "counts", "de_over_e_coarse")
             else:
                 fields = ("time_unix", "epoch", "num_accum", "energy_coarse",
-                          "atten_state", "theta_coarse", "theta_atten_coarse",
+                          "atten_state", "theta_coarse",
                           "phi_coarse", "diff_en_fluxes", "counts",
                           "de_over_e_coarse")
 
@@ -185,7 +177,7 @@ def read(file_path, dataset_type="None", fields=None, lib='cdflib',
                           "diff_en_fluxes", "counts",  "estep_first")
             else:
                 fields = ("time_unix", "epoch", "energy_fine", "atten_state",
-                          "theta_fine", "theta_atten_fine", "phi_fine",
+                          "theta_fine", "phi_fine",
                           "diff_en_fluxes", "counts", "de_over_e_fine",
                           "estep_first", "dstep_first")
         else:
@@ -264,7 +256,8 @@ def process(data_cdf, dataset_type, fields=None, swia_qlevel=0.5,
         estep_first = data_cdf["estep_first"].astype('int')
         if not (over_fov == "sum" or over_fov == "avg"):
             dstep_first = data_cdf['dstep_first'].astype('int')
-            phi_first = np.zeros(shape=data_cdf["time_unix"].shape).astype('int')
+            phi_first = np.zeros(
+                shape=data_cdf["time_unix"].shape).astype('int')
             theta = data_cdf['theta_fine']
             phi = data_cdf['phi_fine']
 
@@ -292,14 +285,19 @@ def process(data_cdf, dataset_type, fields=None, swia_qlevel=0.5,
         # SWIA fine spectra index is timevarying,
         # so if want to uncompress on this time step
         # can do so.
+        # print(name_arr_4d, uncompress_fine, dataset_type, data_i.shape)
         if "fine" in dataset_type and uncompress_fine:
+
             dim_all = (len(energy),)
             start_index = (estep_first,)
             if not (over_fov == "sum" or over_fov == "avg"):
                 dim_all = (len(phi), len(theta), len(energy))
                 start_index = (phi_first, dstep_first, estep_first)
+            # Prefer iterating over index:
+            # data_i = uncompress(
+            #     dim_all, start_index, data_i, iterate_over='time')
             data_i = uncompress(
-                dim_all, start_index, data_i, iterate_over_index=True)
+                dim_all, start_index, data_i, iterate_over='index')
 
         # Reassign the data_cdf variable
         data_cdf[name_arr_4d] = data_i
