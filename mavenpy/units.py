@@ -8,6 +8,168 @@ from .constants import hc_eVum, hc_Jm, eV_to_joules
 
 # Unit conversion functions:
 
+ev2joules = 1.60217646e-19  # Joules in 1 eV
+Avagadro = 6.022e23  # #/mol
+speed_of_light_kms = 299792.458  # km/s
+boltzmann_constant_JK = 1.38e-23  # J/K
+boltzmann_constant_eVK = 8.617e-5  # eV/K
+mu_0 = 1.256e-6  # Vacuum permissivity
+
+h_Js = 6.626e-34  # J s
+h_eVs = 4.135e-15  # eV s
+hbar_Js = 1.054e-34  # J * s
+hbar_eVs = 6.582e-16  # eV * s
+
+# Subatomic masses:
+electron_mass = 9.10938215e-31  # kg
+proton_mass = 1.67262178e-27  # kg
+
+# Molecular mass in g/mol:
+mass_amu_dict =\
+    {"H": 1.00794, "H2": 2.01568, "He": 4.002602, "CO2": 44.01,
+     "CO": 28.010, "N2": 28.02, "O1": 15.9994, "O2": 31.9988, "Ar": 39.948,
+     "H2O": 18.01528, "CH4": 16.04}
+
+# Get the molecular mass in kg
+mass_kg_dict = {n: i/Avagadro*1e-3 for n, i in mass_amu_dict.items()}
+mass_kg_dict["e-"] = electron_mass
+mass_kg_dict["H+"] = proton_mass
+
+particle_num_charge = {"H+": 1, "H0": 0, "e-": -1, "e+": 1, "H-": -1}
+
+
+def mass(mass_kg=None, name=None):
+    '''Function to return mass given a mass or name,
+    checks if name already in list.'''
+
+    if not mass_kg and not name:
+        raise ValueError("Must provide mass (kg) or name (str, e.g. H+).")
+    elif mass_kg:
+        return mass_kg
+    elif name not in mass_kg_dict:
+
+        if 'e' in name:
+            return mass(name='e-')
+        elif 'p' in name:
+            return mass(name='H+')
+
+        raise ValueError(
+            "Mass not known for name '{}', supply mass"
+            " in kilograms instead.".format(name))
+    else:
+        return mass_kg_dict[name]
+
+
+def lorentz_factor_from_velocity(v_kms):
+    '''Returns relativstic Lorentz factor (gamma) given a
+    scalar velocity in km/s'''
+
+    # g = 1 / sqrt(1 - v^2/c^2)
+    return 1 / np.sqrt(1 - (v_kms / speed_of_light_kms) ** 2)
+
+
+def rest_mass(mass_kg, unit='J'):
+    '''Returns rest mass in units of Joules
+    '''
+
+    # M0 = Mc^2 (kgm2s2 = J)
+    M0 = mass_kg * (speed_of_light_kms * 1e3) ** 2
+
+    if unit == 'eV':
+        M0 = M0 / ev2joules
+
+    return M0
+
+
+def energy(v_kms, mass_kg=None, name=None):
+    """ Calculate (kinetic) energy of a particle given mass and velocity.
+    Accounts for relativistic effects.
+
+    v_kms: float, (km/s)
+    mass: float, (kg), optional
+    name: string, particle name to lookup mass.
+
+    Returns energy, (eV) """
+
+    # E = kg * (km/s)**2 * (1e3)**2 / (J/eV)
+    #   = kg * (km*1e3/s)**2 / (J/eV)
+    #   = kg * (m/s)**2 / (J/eV)
+    #   = eV
+    # Get mass:
+    mass_kg = mass(mass_kg=mass_kg, name=name)
+
+    # Calculate lorentz factor:
+    g = lorentz_factor_from_velocity(v_kms)
+
+    # Rest mass:
+    rest_mass_eV = rest_mass(mass_kg, unit='eV')
+
+    # Non relativstic commented out:
+    # return 0.5 * mass_kg * (v_kms * 1e3)**2 / ev2joules
+
+    return rest_mass_eV * (g - 1)
+
+
+def scalar_velocity(energy_eV, mass_kg=None, name=None):
+    '''Returns a scalar velocity for an energy and species or mass'''
+
+    # Get the mass:
+    mass_kg = mass(mass_kg=mass_kg, name=name)
+
+    # Non-relativistic commented out:
+    # v_kms = 1e-3 * math.sqrt(2. * energy_eV * ev2joules / mass)
+
+    # Rest mass:
+    rest_mass_eV = rest_mass(mass_kg, unit='eV')
+
+    # Get ratio of energy to rest mass:
+    ratio = energy_eV / rest_mass_eV
+
+    v_kms = speed_of_light_kms * np.sqrt(
+        1 - (1 / (1 + ratio)) ** 2)
+
+    return v_kms
+
+
+# Pressures (for plasma pressure balance):
+
+def dynamic_pressure(density_cm3, velocity_kms, mass_kg=None, name=None):
+    '''Returns in nPa the dynamic plasma pressure
+    (`r u^2 = m_i n_i u_i^2)'''
+
+    # Get the mass:
+    mass_kg = mass(mass_kg=mass_kg, name=name)
+
+    # P_dyn = m_H * n * u^2
+    #   = kg cm-3 * (km/s)^2 = kg m-3 * (10^2)^3 * (10^3 m/s)^2
+    #   = # kg / s^2 / m *1e12 = Pa
+    P_dyn = density_cm3 * velocity_kms**2 * mass_kg * 1e21
+
+    return P_dyn
+
+
+def thermal_pressure(density_cm3, temperature_eV):
+    '''Returns thermal pressure in nPa
+    (P_th = n_i k T_i)'''
+
+    # Thermal pressure
+    # P_th = N k T = eV/cm3 = J/m3 (eV2joules * (100)^3)
+    P_therm = (density_cm3 * 1e6) * (temperature_eV * ev2joules) * 1e9
+
+    return P_therm
+
+
+def magnetic_pressure(B_nT):
+    '''Returns magnetic pressure in nPa
+    (P_mag = B^2 / 2 mu_0)'''
+
+    # MAgnetic pressure
+    # N/A^2 * (nT)^2 = 1e-18 N T^2 /A^2
+
+    P_mag = (B_nT * 1e-9)**2/(2 * mu_0) * 1e9
+
+    return P_mag
+
 
 def B_angles(bx, by, bz):
 
