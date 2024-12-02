@@ -6,7 +6,7 @@ from dateutil.parser import parse
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm, Normalize, ListedColormap
 
-from mavenpy import file_path, load, retrieve, helper
+from mavenpy import file_path, load, retrieve, plot_tools, helper
 
 
 if __name__ == "__main__":
@@ -26,8 +26,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--end",
         help="End day of MAVEN SEP data (YYYY-MM-DD HH:MM:SS).",
-        type=lambda s: dt.datetime.strptime(s, "%Y-%m-%d"),
-        required=True,
+        type=lambda s: dt.datetime.strptime(s, "%Y-%m-%d")
+    )
+    parser.add_argument(
+        "--n_days",
+        help="# of days to load, alternative to --end.",
+        type=int
     )
 
     parser.add_argument(
@@ -225,7 +229,15 @@ if __name__ == "__main__":
 
     # Time range:
     start = args.start
-    end = args.end
+
+    if not args.end:
+        if args.n_days:
+            end = start + dt.timedelta(days=args.n_days - 1)
+        else:
+            end = start
+
+    else:
+        end = args.end
 
     # Do the download:
     if args.download:
@@ -380,7 +392,7 @@ if __name__ == "__main__":
                 p = ax_i.pcolormesh(
                     epoch_i, energy, flux.T, norm=output_data_norm,
                     cmap=output_data_cmap)
-                cbar = helper.add_colorbar_outside(
+                cbar = plot_tools.add_colorbar_outside(
                     p, fig, ax_i, label=plot_unit)
                 ax_i.set_yscale('log')
                 ax_i.set_ylabel(ylabel_i, rotation='horizontal',
