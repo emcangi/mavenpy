@@ -2,6 +2,7 @@ import datetime as dt
 import argparse
 import sys
 
+import numpy as np
 from dateutil.parser import parse
 from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm, Normalize, ListedColormap
@@ -34,6 +35,7 @@ if __name__ == "__main__":
         type=int
     )
 
+    # Plotting controls:
     parser.add_argument(
         "--zlim",
         help="Interval of flux/counts to map colors onto,"
@@ -41,7 +43,6 @@ if __name__ == "__main__":
         type=float,
         nargs="+"
     )
-
     parser.add_argument(
         "--xlim",
         help="Interval to show data between (YYYY-MM-DDTHH:MM_1,"
@@ -49,7 +50,6 @@ if __name__ == "__main__":
         type=str,
         nargs="+"
     )
-
     parser.add_argument(
         "--ylim",
         help="Interval to show data between energies (E_1,"
@@ -57,14 +57,25 @@ if __name__ == "__main__":
         type=float,
         nargs="+"
     )
-
+    parser.add_argument(
+        "--vline",
+        help="Time to draw a black dashed vertical line at"
+             "(YYYY-MM-DD HH:MM:SS).",
+        type=lambda s: parse(s)
+    )
     parser.add_argument(
         "--cmap",
         help="Color map referenced (e.g. rainbow, jet, viridis, etc).",
         type=str,
         default='jet'
     )
+    parser.add_argument(
+        "--exclude_atten",
+        help="Argument to exclude attenuator if activated.",
+        action="store_true"
+    )
 
+    # Data type to plot as:
     parser.add_argument(
         "--show_as",
         help="Return plots in given units ('counts', 'rate' or 'flux')."
@@ -79,6 +90,13 @@ if __name__ == "__main__":
              " or a particle e.g. elec. Defaults to particle.",
         type=str,
         default='particle'
+    )
+
+    parser.add_argument(
+        "--plot",
+        help="'line' or 'spectra' plot, default is 'spectra'.",
+        type=str,
+        default='spectra'
     )
 
     # Subtypes of SEP
@@ -204,17 +222,22 @@ if __name__ == "__main__":
     if args.zlim:
         vmax, vmin = args.zlim
     else:
-        if output_data_units == "flux":
+        if "flux" in output_data_units:
             vmin, vmax = 1, 1e5
         else:
             vmin, vmax = 1, 1e4
 
     if output_data_units == "flux":
         plot_unit = "#/cm2\n/s/sr/keV"
+    elif output_data_units == "eflux":
+        plot_unit = "keV/cm2\n/s/sr/keV"
     elif output_data_units == "rate":
         plot_unit = "#/s"
     elif output_data_units == "counts":
         plot_unit = "#"
+
+    if args.plot == 'line':
+        plot_unit = plot_unit.replace("\n", "")
 
     output_data_norm = LogNorm(vmin=vmin, vmax=vmax)
 
@@ -296,7 +319,7 @@ if __name__ == "__main__":
             telemetry_mode=telemetry_mode,
             detector=read_detector, telescope=telescope,
             output_calibration_level=output_calibration_level,
-            output_data_units=output_data_units)
+            output_data_units=('flux', 'rate', 'counts'))
 
         sep_keys = sep_all.keys()
         sep_dict = {}
@@ -340,18 +363,27 @@ if __name__ == "__main__":
 
     # Set up the plot:
     atten_plot_height = 0.2
-    n_plots = n_sensors * (n_x_plot * n_y_plot + 1)
-    height_ratios = n_sensors *\
-        ([1]*n_x_plot * n_y_plot + [atten_plot_height])
-    fig_height = max(min(
-        n_sensors*(1*n_x_plot * n_y_plot + atten_plot_height) * 1, 8), 4)
+    n_plots = n_sensors * (n_x_plot * n_y_plot)
+    height_ratios = n_sensors * [1] * n_x_plot * n_y_plot
+    if not args.exclude_atten:
+        height_ratios = n_sensors * ([1] * n_x_plot * n_y_plot + [atten_plot_height])
+        n_plots += n_sensors
+
+    # fig_height = max(min(
+    #     n_sensors*(1*n_x_plot * n_y_plot + atten_plot_height) * 1, 8), 4)
+    fig_height = max(min(sum(height_ratios), 8), 4)
     fig, ax = plt.subplots(
         nrows=n_plots, height_ratios=height_ratios, sharex=True,
         figsize=(10, fig_height))
-    # plt.subplots_adjust(
-    #     left=0.135, bottom=0.05, right=0.88, top=0.95, wspace=0, hspace=0)
-    plt.subplots_adjust(
-        left=0.135, right=0.88, top=0.95, wspace=0, hspace=0)
+
+    if args.plot == 'spectra':
+        # Adjust for fitting colorbar:
+        # plt.subplots_adjust(
+        #     left=0.135, bottom=0.05, right=0.88, top=0.95, wspace=0, hspace=0)
+        plt.subplots_adjust(
+            left=0.135, right=0.88, top=0.95, wspace=0, hspace=0)
+    elif args.plot == 'line':
+        plt.subplots_adjust(top=0.95, right=0.95, wspace=0, hspace=0)
 
     for sensor_index, sensor_i in enumerate(sensors):
         sep_i = sep_dict[sensor_i]
@@ -377,7 +409,12 @@ if __name__ == "__main__":
 
                 # print(data_label_i)
                 energy = sep_i["{}_energy".format(data_label_i)]
-                flux = sep_i["{}_{}".format(data_label_i, output_data_units)]
+
+                if output_data_units == "eflux":
+                    nflux = sep_i["{}_flux".format(data_label_i)]
+                    flux = energy[np.newaxis, :] * nflux
+                else:
+                    flux = sep_i["{}_{}".format(data_label_i, output_data_units)]
 
                 # print(flux.shape, epoch_i.shape, energy.shape)
 
@@ -389,26 +426,54 @@ if __name__ == "__main__":
                     sensor_index*(n_x_plot*n_y_plot + 1)
                 ax_i = ax[plot_index]
 
-                p = ax_i.pcolormesh(
-                    epoch_i, energy, flux.T, norm=output_data_norm,
-                    cmap=output_data_cmap)
-                cbar = plot_tools.add_colorbar_outside(
-                    p, fig, ax_i, label=plot_unit)
-                ax_i.set_yscale('log')
-                ax_i.set_ylabel(ylabel_i, rotation='horizontal',
-                                va='center', labelpad=35)
-                # cbar.ax.tick_params(labelsize=10)
-                cbar.ax.yaxis.label.set(
-                    rotation='horizontal', ha='left')
+                if args.plot == "spectra":
+                    p = ax_i.pcolormesh(
+                        epoch_i, energy, flux.T, norm=output_data_norm,
+                        cmap=output_data_cmap)
+                    cbar = plot_tools.add_colorbar_outside(
+                        p, fig, ax_i, label=plot_unit)
+                    ax_i.set_yscale('log')
+                    ax_i.set_ylabel(ylabel_i, rotation='horizontal',
+                                    va='center', labelpad=35)
+                    # cbar.ax.tick_params(labelsize=10)
+                    cbar.ax.yaxis.label.set(
+                        rotation='horizontal', ha='left')
+                elif args.plot == 'line':
+                    cmap = plt.get_cmap(output_data_cmap)
+                    n_energy_plot = 4
+
+                    above_e = (energy > 25)
+                    flux = flux[:, above_e]
+                    energy = energy[above_e]
+                    n_energy_act = len(energy)
+
+                    N_spacing = int(n_energy_act/n_energy_plot)
+                    index_i = [i for i in range(n_energy_act) if i % N_spacing == 0]
+
+                    en_color = cmap(np.linspace(0, 1, n_energy_act))
+
+                    for en_i in index_i:
+                        ax_i.plot(
+                            epoch_i, flux[:, en_i],
+                            label=helper.format_energy_as_string(energy[en_i]*1e3),
+                            color=en_color[en_i])
+                    ax_i.set_yscale('log')
+                    ax_i.set_ylabel("SEP {}{}, {}\n{}".format(sensor_i, name_y_i, name_x_i, plot_unit))
+                    ax_i.legend()
+
                 if args.ylim is not None:
                     ax_i.set_ylim(args.ylim)
 
-        ax_atten = ax[plot_index + 1]
-        ax_atten.pcolormesh(
-            epoch_i, [0, 1], [att_i, att_i],
-            cmap=ListedColormap(['b', 'r']), norm=Normalize(vmin=1, vmax=2))
-        ax_atten.yaxis.set_visible(False)
-        ax_atten.set_yticks([], minor=True)
+                if args.vline is not None:
+                    ax_i.axvline(args.vline, color='k', linestyle='--')
+
+        if not args.exclude_atten:
+            ax_atten = ax[plot_index + 1]
+            ax_atten.pcolormesh(
+                epoch_i, [0, 1], [att_i, att_i],
+                cmap=ListedColormap(['b', 'r']), norm=Normalize(vmin=1, vmax=2))
+            ax_atten.yaxis.set_visible(False)
+            ax_atten.set_yticks([], minor=True)
     # fig.autofmt_xdate()
     # ax[0].xaxis.set_minor_locator(mdates.MinuteLocator(byminute=[30,]))
     import matplotlib.dates as mdates
