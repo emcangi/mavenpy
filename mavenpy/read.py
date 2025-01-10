@@ -53,6 +53,7 @@ def read_cdf(cdf_file_path, field_names='', lib='cdflib', show_info=False):
                 # This is a patch around fillvals in epoch
                 # ruining the rest of the array for heretofor
                 # unknown reasons.
+                data_i = np.array(data_i)
                 nonsense_index = np.where(data_i < 0)[0]
                 if nonsense_index.size == 0:
                     data_i = cdflib.cdfepoch.to_datetime(data_i)

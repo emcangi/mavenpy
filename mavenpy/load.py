@@ -89,12 +89,12 @@ def load_data(maven_data_files, data_read_function=None,
     iterate_names = []
     for d in data_names:
         data_day_i = data_struct[d]
-        print(d)
-        print(data_day_i)
-        print(data_day_i[:10])
-        print(type(data_day_i))
-        print(data_day_i.shape)
-        input()
+        # print(d)
+        # print(data_day_i)
+        # print(data_day_i[:10])
+        # print(type(data_day_i))
+        # print(data_day_i.shape)
+        # input()
         # try:
         data_i_d_dim = data_day_i.shape
         # print(data_i_d_dim)
