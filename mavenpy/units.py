@@ -14,6 +14,7 @@ speed_of_light_kms = 299792.458  # km/s
 boltzmann_constant_JK = 1.38e-23  # J/K
 boltzmann_constant_eVK = 8.617e-5  # eV/K
 mu_0 = 1.256e-6  # Vacuum permissivity
+km_to_AU = 1.496e8
 
 h_Js = 6.626e-34  # J s
 h_eVs = 4.135e-15  # eV s
