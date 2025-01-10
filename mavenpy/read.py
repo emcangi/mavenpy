@@ -18,8 +18,6 @@ def read_cdf(cdf_file_path, field_names='', lib='cdflib', show_info=False):
 
     data_dict = {}
 
-    print(lib)
-
     if lib == 'spacepy':
         data_cdf = pycdf.CDF(cdf_file_path)
 
@@ -70,11 +68,13 @@ def read_cdf(cdf_file_path, field_names='', lib='cdflib', show_info=False):
                     full_epoch[not_nonsense_index] = not_nonsense_epoch
                     full_epoch[nonsense_index] = np.datetime64('1900-01-01')
                     data_i = full_epoch
+
+                # Fixes errant conversion into list, which breaks append:
                 data_i = np.array(data_i)
                 # print(data_i[28:34])
                 # input()
 
-            print(field_name_i, type(data_i))
+            # print(field_name_i, type(data_i))
 
             data_dict[field_name_i] = data_i
         # print('end varget')
