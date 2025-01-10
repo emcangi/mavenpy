@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import datetime as dt
 from collections.abc import Iterable
@@ -351,6 +353,49 @@ def find_closest_index_dt(time_dt, posix_time_array):
     closest_time_index = find_closest_index(posix_time_array, target_time_unx)
 
     return closest_time_index
+
+
+def format_trange_as_string(utc_i_dt, utc_f_dt, fmt="%-m/%-d %H:%M",
+                            delimiter="-"):
+    '''Returns a string that describes a time range
+    with removed redundant info:'''
+
+    utc_i_str = utc_i_dt.strftime(fmt)
+
+    fmt_substr = re.findall(r"(%*.\w)", fmt)
+
+    for fmt_i in fmt_substr:
+        utc_i_str_j = utc_i_dt.strftime(fmt_i)
+        utc_f_str_j = utc_f_dt.strftime(fmt_i)
+        # print(fmt_i, utc_i_str_j, utc_f_str_j)
+
+        if utc_i_str_j != utc_f_str_j:
+            # print('break')
+
+            i = fmt.index(fmt_i)
+            # len_i = len(fmt_i)
+            # rest_subst = fmt[i+len_i:]
+            rest_subst = fmt[i:]
+
+            # print(rest_subst)
+            j = rest_subst.index("%")
+            end_str_repr = rest_subst[j:]
+            # print(end_str_repr)
+            break
+
+    # end_str_repr = ""
+    # if utc_i_dt.month != utc_f_dt.month:
+    #     # end_str_repr += "%b-"
+    #     end_str_repr += "%-m/"
+    # if utc_i_dt.day != utc_f_dt.day:
+    #     end_str_repr += "%-d "
+    # if utc_i_dt.hour != utc_f_dt.hour:
+    #     end_str_repr += "%H:"
+    # end_str_repr += "%M"
+
+    obs_end_str = utc_f_dt.strftime(end_str_repr)
+
+    return "{}{}{}".format(utc_i_str, delimiter, obs_end_str)
 
 
 def format_energy_as_string(energy):
