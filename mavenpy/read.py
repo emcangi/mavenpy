@@ -48,7 +48,7 @@ def read_cdf(cdf_file_path, field_names='', lib='cdflib', show_info=False):
         for field_name_i in field_names:
             data_i = data_cdf.varget(field_name_i)
 
-            print(field_name_i, type(data_i))
+            # print(field_name_i, type(data_i))
 
             if field_name_i == "epoch":
                 # print("epoch")
@@ -58,7 +58,7 @@ def read_cdf(cdf_file_path, field_names='', lib='cdflib', show_info=False):
                 # This is a patch around fillvals in epoch
                 # ruining the rest of the array for heretofor
                 # unknown reasons.
-                data_i = np.array(data_i)
+                # data_i = np.array(data_i)
                 nonsense_index = np.where(data_i < 0)[0]
                 if nonsense_index.size == 0:
                     data_i = cdflib.cdfepoch.to_datetime(data_i)
@@ -70,6 +70,7 @@ def read_cdf(cdf_file_path, field_names='', lib='cdflib', show_info=False):
                     full_epoch[not_nonsense_index] = not_nonsense_epoch
                     full_epoch[nonsense_index] = np.datetime64('1900-01-01')
                     data_i = full_epoch
+                data_i = np.array(data_i)
                 # print(data_i[28:34])
                 # input()
 
