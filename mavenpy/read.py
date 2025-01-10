@@ -18,6 +18,8 @@ def read_cdf(cdf_file_path, field_names='', lib='cdflib', show_info=False):
 
     data_dict = {}
 
+    print(lib)
+
     if lib == 'spacepy':
         data_cdf = pycdf.CDF(cdf_file_path)
 
@@ -45,6 +47,9 @@ def read_cdf(cdf_file_path, field_names='', lib='cdflib', show_info=False):
 
         for field_name_i in field_names:
             data_i = data_cdf.varget(field_name_i)
+
+            print(field_name_i, type(data_i))
+
             if field_name_i == "epoch":
                 # print("epoch")
                 # print(data_i[:10])
@@ -67,6 +72,9 @@ def read_cdf(cdf_file_path, field_names='', lib='cdflib', show_info=False):
                     data_i = full_epoch
                 # print(data_i[28:34])
                 # input()
+
+            print(field_name_i, type(data_i))
+
             data_dict[field_name_i] = data_i
         # print('end varget')
         # input()
