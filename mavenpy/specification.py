@@ -2,6 +2,7 @@ import re
 import datetime as dt
 
 from dateutil.relativedelta import relativedelta
+from dateutil.parser import parse
 
 from . import helper
 
@@ -447,6 +448,10 @@ def check_if_dataset_on_remote(instrument, source, auth_present=False,
 
         if source == "ssl_sprg":
             six_months_ago = dt.datetime.now() - relativedelta(months=6)
+
+            if isinstance(start_utc, str):
+                start_utc = parse(start_utc)
+
             if start_utc > six_months_ago:
                 raise TypeError(
                     "Require authentication information (username and password)"
