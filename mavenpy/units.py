@@ -149,6 +149,45 @@ def dynamic_pressure(density_cm3, velocity_kms, mass_kg=None, name=None):
     return P_dyn
 
 
+def alfven_speed(B_nT, density_cm3, mass_kg=None, name=None):
+
+    # Get the mass:
+    mass_kg = mass(mass_kg=mass_kg, name=name)
+
+    rho_kgm3 = mass_kg * (density_cm3 * 1e6)
+
+    # B/sqrt(rho*u_0)
+    V_a_ms = 1e-9 * B_nT / np.sqrt(rho_kgm3 * mu_0)
+    V_a_kms = V_a_ms * 1e-3
+
+    return V_a_kms
+
+
+def sound_speed(Tp_eV, Te_eV, proton_alpha_ratio=0, THe_eV=0):
+
+    # Sound speed in a medium:
+    # V_speed^2 = gamma Thermal Pressure / mass density
+    #           = gamma sum(Temperature * n_i/n_p) / sum(Mass * n_i/n_p)
+
+    # For solar wind, will be:
+    # V_speed^2 = gamma (T_p + T_e + AT_He) / (m_p + m_e + Am_He)
+    # where A is n_He/n_p
+
+    # Units: V^2 = eV / kg * J/eV = kg (m/s)^2 / kg = (m/s)^2
+    # where gamma is the adiabatic index (usually 5/3)
+
+    gamma = 5/3  # N + 2 / N for N = 3 degrees of freedom
+
+    T_J = (Tp_eV + Te_eV + proton_alpha_ratio*THe_eV) * eV_to_joules
+    m_kg = proton_mass + electron_mass + proton_alpha_ratio*mass_kg_dict["He"]
+
+    v_sound_m2s2 = gamma * T_J / m_kg
+
+    v_sound_kms = 1e-3 * np.sqrt(v_sound_m2s2)
+
+    return v_sound_kms
+
+
 def thermal_pressure(density_cm3, temperature_eV):
     '''Returns thermal pressure in nPa
     (P_th = n_i k T_i)'''
