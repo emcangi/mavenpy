@@ -53,26 +53,30 @@ def read_cdf(cdf_file_path, field_names='', lib='cdflib', show_info=False):
                 # print(data_i[:10])
                 # NOTE: cdfepoch lacks fractional second precision
 
-                # This is a patch around fillvals in epoch
-                # ruining the rest of the array for heretofor
-                # unknown reasons.
-                # data_i = np.array(data_i)
-                nonsense_index = np.where(data_i < 0)[0]
-                if nonsense_index.size == 0:
-                    data_i = cdflib.cdfepoch.to_datetime(data_i)
-                else:
-                    full_epoch = np.empty(data_i.shape, dtype='datetime64[s]')
-                    not_nonsense_index = np.where(data_i > 0)[0]
-                    not_nonsense_epoch = cdflib.cdfepoch.to_datetime(
-                        data_i[not_nonsense_index])
-                    full_epoch[not_nonsense_index] = not_nonsense_epoch
-                    full_epoch[nonsense_index] = np.datetime64('1900-01-01')
-                    data_i = full_epoch
+                data_i = cdflib.cdfepoch.to_datetime(data_i)
+
+                # NaTs fixed as of 2025/01/15 in cdflib 1.3.3.
+                # # This is a patch around fillvals in epoch
+                # # ruining the rest of the array for heretofor
+                # # unknown reasons.
+                # # data_i = np.array(data_i)
+                # nonsense_index = np.where(data_i < 0)[0]
+                # print(nonsense_index)
+                # if nonsense_index.size == 0:
+                #     data_i = cdflib.cdfepoch.to_datetime(data_i)
+                # else:
+                #     full_epoch = np.empty(data_i.shape, dtype='datetime64[s]')
+                #     not_nonsense_index = np.where(data_i > 0)[0]
+                #     not_nonsense_epoch = cdflib.cdfepoch.to_datetime(
+                #         data_i[not_nonsense_index])
+                #     full_epoch[not_nonsense_index] = not_nonsense_epoch
+                #     full_epoch[nonsense_index] = np.datetime64('1900-01-01')
+                #     data_i = full_epoch
 
                 # Fixes errant conversion into list, which breaks append:
                 data_i = np.array(data_i)
-                # print(data_i[28:34])
-                # input()
+                # # print(data_i[28:34])
+                # # input()
 
             # print(field_name_i, type(data_i))
 

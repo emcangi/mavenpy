@@ -10,7 +10,7 @@ install_requirements = [
     "numpy",
     "python-dateutil",
     "spacepy",
-    "cdflib",
+    "cdflib>=1.3.3",
     "scipy",
     "matplotlib",
     "spiceypy",
