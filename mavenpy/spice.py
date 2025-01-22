@@ -937,14 +937,33 @@ def dt_to_et(i):
     '''Convert any time string or datetime
     into an ephemeris time'''
 
+    # First, convert the str into datetime,
+    # so it won't trip the Iterable check:
     if isinstance(i, str):
         i = parsedt(i)
 
-    if isinstance(i, np.datetime64):
-        i = i.astype(dt.datetime)
-
+    # Now, detect if the provided item is an Iterable
+    # and return a list iterating over items if in list/array:
     if isinstance(i, Iterable):
         return [dt_to_et(i_i) for i_i in i]
+
+    # print(i, type(i))
+    # If this is a numpy datetime64, need to convert into
+    # a datetime.
+
+    # HOWEVER: just doing "i.astype(dt.datetime)"
+    # does not always work and will sometimes instead
+    # return the # of nanoseconds since 1970
+    # (https://github.com/numpy/numpy/issues/20351).
+
+    # So what we do instead is convert into a string
+    # via datetime_as_string, which returns in the format
+    # '%Y-%m-%dT%H:%M:%S', and then convert into a datetime via strptime.
+    if isinstance(i, np.datetime64):
+        # print('conv to dt')
+        i = dt.datetime.strptime(
+            str(np.datetime_as_string(i, unit='s')),
+            '%Y-%m-%dT%H:%M:%S')
 
     return spiceypy.str2et(i.strftime("%b %d, %Y %H:%M:%S"))
 
@@ -991,34 +1010,45 @@ def sep_mso_look_dir(time_UTC, sensor_number, look_direction):
     """Rotate the look direction of a given MAVEN SEP sensor
     into MSO coordinates."""
 
-    # get ephemeris time:
-    ephemeris_time = dt_to_et(time_UTC)
-    N = len(ephemeris_time)
+    # # get ephemeris time:
+    # ephemeris_time = dt_to_et(time_UTC)
+    # N = len(ephemeris_time)
+
+    look_direction = look_direction.lower()[:1]
 
     if look_direction == "f":
-        sep_frame_pointing = (1, 0, 0)
+        fov_x = 1
     elif look_direction == "r":
-        sep_frame_pointing = (-1, 0, 0)
+        fov_x = -1
+    else:
+        raise ValueError(
+            "Look direction '{}' not recognized, "
+            "use 'r' or 'f' instead.".format(look_direction))
 
-    # initialize 3D matrix to fill in:
-    sep_mso = np.zeros(shape=(N, 3))
+    sep_mso = pxform(
+        time_UTC, fov_x, 0, 0,
+        "MAVEN_SEP{}".format(sensor_number),
+        "MAVEN_MSO")
 
-    for i, et in enumerate(ephemeris_time):
-        frame = "MAVEN_SEP{}".format(sensor_number)
+    # # initialize 3D matrix to fill in:
+    # sep_mso = np.zeros(shape=(N, 3))
 
-        try:
-            m = spiceypy.pxform(frame, "MAVEN_MSO", et)
-        except spiceypy.utils.support_types.SpiceyError:
-            sep_mso.append([np.nan, np.nan, np.nan])
-            continue
+    # for i, et in enumerate(ephemeris_time):
+    #     frame = "MAVEN_SEP{}".format(sensor_number)
 
-        q = spiceypy.m2q(m)
-        # print(q)
-        sep_x_mso, sep_y_mso, sep_z_mso = quaternion_rotation(
-            q, sep_frame_pointing)
-        # print(sep_x_mso, sep_y_mso, sep_z_mso)
-        sep_mso[i, :] = sep_x_mso, sep_y_mso, sep_z_mso
-        # input()
+    #     try:
+    #         m = spiceypy.pxform(frame, "MAVEN_MSO", et)
+    #     except spiceypy.utils.support_types.SpiceyError:
+    #         sep_mso.append([np.nan, np.nan, np.nan])
+    #         continue
+
+    #     q = spiceypy.m2q(m)
+    #     # print(q)
+    #     sep_x_mso, sep_y_mso, sep_z_mso = quaternion_rotation(
+    #         q, sep_frame_pointing)
+    #     # print(sep_x_mso, sep_y_mso, sep_z_mso)
+    #     sep_mso[i, :] = sep_x_mso, sep_y_mso, sep_z_mso
+    #     # input()
 
     return sep_mso
 
@@ -1027,29 +1057,63 @@ def bpl_to_bmso(time_UTC, bx_pl, by_pl, bz_pl):
     """Rotate the measured B from MAVEN MAG from payload coordinates
     into MSO coordinates."""
 
+    b_mso = pxform(
+        time_UTC, bx_pl, by_pl, bz_pl,
+        "MAVEN_SPACECRAFT", "MAVEN_MSO")
+
+    return b_mso
+
+
+def pxform(time_UTC, v_x, v_y, v_z, initial_frame, final_frame):
+    """Rotate the measured vector from initial frame to final frame.
+    Wrapper for pxform."""
+
     # get ephemeris time:
     ephemeris_time = dt_to_et(time_UTC)
     N = len(ephemeris_time)
 
-    # initial B to fill in:
-    b_mso = np.zeros(shape=(N, 3))
+    # Check if any CK kernels are loaded, and if so, if they
+    # are the correct ones
+    n_ck = spiceypy.ktotal('CK')
+    if n_ck == 0:
+        raise IOError("No CK files loaded, please load.")
+    else:
+        for i in range(n_ck):
+            k_info_i = spiceypy.kdata(i, 'CK')
+            file_path_i = k_info_i[0]
+            ck_code_i = spiceypy.ckobj(file_path_i)[0]
+
+    # initial vector array to fill in:
+    v_f = np.zeros(shape=(N, 3))
 
     for i, et_i in enumerate(ephemeris_time):
-        # try:
-        m = spiceypy.pxform("MAVEN_SPACECRAFT", "MAVEN_MSO", et_i)
-        # except spiceypy.utils.support_types.SpiceyError:
-        #     b_mso.append([np.nan, np.nan, np.nan])
-        #     continue
+
+        try:
+            m = spiceypy.pxform(initial_frame, final_frame, et_i)
+        except spiceypy.utils.exceptions.SpiceNOFRAMECONNECT:
+            # When no frame available, which can happen if
+            # the frame wasn't loaded (load_kernels must be
+            # run before this routine to get a sensible result).
+            # This happens also for Spice gaps, e.g. 2015 Mar -4 00:00
+
+            v_f[i, :] = np.nan, np.nan, np.nan
+            continue
 
         q = spiceypy.m2q(m)
         # print(q)
         # print(bx_pl[idx], by_pl[idx], bz_pl[idx])
-        bx_mso, by_mso, bz_mso = quaternion_rotation(
-            q, (bx_pl[i], by_pl[i], bz_pl[i]))
-        # print(bx_mso, by_mso, bz_mso)
-        b_mso[i, :] = bx_mso, by_mso, bz_mso
 
-    return b_mso
+        if isinstance(v_x, Iterable):
+            v_i = (v_x[i], v_y[i], v_z[i])
+        else:
+            v_i = (v_x, v_y, v_z)
+
+        v_x_f, v_y_f, v_z_f = quaternion_rotation(q, v_i)
+        # print(bx_mso, by_mso, bz_mso)
+        v_f[i, :] = v_x_f, v_y_f, v_z_f
+
+    return v_f
+
 
 
 def quaternion_rotation(q, v):
