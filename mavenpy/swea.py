@@ -16,8 +16,22 @@ swea_units =\
      "elev": "deg, instrument elevation angle (energy-varying)",
      "azim": "deg, instrument azimuthal angle",
      "pa": "deg., 64 x 16 array of center pitch angles (time-varying)",
-     "d_pa": "deg., pitch angle range spanned by each bin"
+     "d_pa": "deg., pitch angle range spanned by each bin",
+     "quality": "unitless, quality flag that marks if affected by "
+                "sporadic low energy (below 28 eV) anomaly, "
+                "(0 - affected, 1 - unknown [common in sheath],"
+                " 2 - not affected)",
+     "secondary": "eV/(cm2 s sr eV), secondary electron contamination"
      }
+
+
+edependent_vars =\
+    ("diff_en_fluxes", "counts", "secondary", "variance")
+e_vars = ("g_engy", "de_over_e", "energy", "en_label")
+
+scpot_method =\
+    {-1: "Invalid", 0: "Manual", 1: "pot_swelpw", 2: "pot_swepos",
+     3: "pot_sweneg", 4: "pot_sta", 5: "pot_sweshdw"}
 
 
 #########################################
@@ -50,50 +64,67 @@ def read(data_file, dataset_type="None",
            - Note: while "arc" versions of 3d and pad exist,
            an "arc" version of spec doesnt exist since telemetry
            bandwidth ended up higher than planned/
-        - scpot: 
+        - scpot: spacecraft potential as a function of time,
+          combined from multiple datasources.
 
     data_file: name of file to be read
     """
 
     if dataset_type == "None":
+        # Cut the path down to just the filename:
         filename = os.path.split(data_file)[1]
         if "spec" in filename:
-            dataset_type = "s"
+            dataset_type = "spec"
         elif "3d" in filename:
-            dataset_type = "3"
+            dataset_type = "3d"
         elif "pad" in filename:
-            dataset_type = "p"
+            dataset_type = "pad"
+        elif "scpot" in filename:
+            dataset_type = "scpot"
+
+    if dataset_type == "scpot":
+        return read_scpot(data_file, include_unit=include_unit)
 
     if not fields:
-        if dataset_type == "s":
+        if dataset_type == "spec":
             # spectra
             fields = ("time_unix", "epoch",
                       "diff_en_fluxes", "counts",
                       "energy", "de_over_e",
-                      "num_accum")
+                      "num_accum", "quality", "secondary")
 
-        if dataset_type == "p":
+        if dataset_type == "pad":
             # PAD
             fields = ("time_unix", "epoch",
                       "diff_en_fluxes", "counts",
                       "energy", "de_over_e",
                       "pa", "d_pa",
-                      "binning")
+                      "binning", "quality")
 
-        if dataset_type == "3":
+        if dataset_type == "3d":
             # 3D
             fields = ("time_unix", "epoch",
                       "diff_en_fluxes", "counts",
                       "energy", "elev", "azim",
-                      "binning")
+                      "binning", "quality")
 
     # Pull data from the SWIA Level 2 CDF
     data_cdf = read_cdf(data_file, fields, lib=lib)
+    # print(data_cdf.keys())
+    # for n in data_cdf:
+    #     print(n, data_cdf[n].shape)
+    # input()
 
+    # All energy-dependent axes are ordered from highest to lowest
+    # since the instrument works by cycling through the energies
+    # in that order. However, for our uses, it's best to flip those
+    # axes so they are increasing.
     data_cdf = invert_energy_axis(
-        data_cdf, energy_names=('energy',),
+        data_cdf, energy_names=(i for i in fields if i in e_vars),
+        energy_dependent_var_names=(i for i in fields if i in edependent_vars),
         energy_dependent_var_axis=-1)
 
+    # Option to include unit:
     if include_unit:
         data_cdf = process_data_dict(data_cdf, units=swea_units)
 
@@ -105,12 +136,7 @@ def read(data_file, dataset_type="None",
 #########################################
 
 
-scpot_method =\
-    {-1: "Invalid", 0: "Manual", 1: "pot_swelpw", 2: "pot_swepos",
-     3: "pot_sweneg", 4: "pot_sta", 5: "pot_sweshdw"}
-
-
-def read_scpot(filename, source=('comp',)):
+def read_scpot(filename, source=('comp',), include_unit=True):
     '''Retrieve SWEA Level-3 spacecraft potential files in the original IDL sav
     format. Note this is very slow.
 
@@ -139,6 +165,9 @@ def read_scpot(filename, source=('comp',)):
         else:
             raise IOError()
 
-        scpot_struct[name] = (scpot[name], unit)
+        if include_unit:
+            scpot_struct[name] = (scpot[name], unit)
+        else:
+            scpot_struct[name] = scpot[name]
 
     return scpot_struct
