@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LogNorm
 from dateutil.relativedelta import relativedelta
 
-from mavenpy import file_path, spice, load, anc, helper, mars_shape_conics, retrieve
+from mavenpy import file_path, spice, load, anc, helper, mars_shape_conics, retrieve, plot_tools
 
 
 if __name__ == "__main__":
@@ -199,7 +199,7 @@ if __name__ == "__main__":
     ax[2].set_yscale('log')
     ax[2].set_ylabel("SWEA\nEnergy, eV")
     # plt.colorbar(p, ax=ax_all[1])
-    helper.add_colorbar_outside(
+    plot_tools.add_colorbar_outside(
         p, fig, ax[2], orientation='vertical',
         label='Eflux\neV/eV/cm2/ster/s')
 
@@ -213,12 +213,12 @@ if __name__ == "__main__":
         sep_epoch, elec_energy, elec_flux.T, norm=LogNorm(1, 1e6))
     ax[-3].set_yscale('log')
     ax[-3].set_ylabel('1F elec')
-    helper.add_colorbar_outside(p, fig, ax[-3])
+    plot_tools.add_colorbar_outside(p, fig, ax[-3])
     p = ax[-2].pcolormesh(
         sep_epoch, ion_energy, ion_flux.T, norm=LogNorm(1, 1e6))
     ax[-2].set_yscale('log')
     ax[-2].set_ylabel('1F ion')
-    helper.add_colorbar_outside(p, fig, ax[-2])
+    plot_tools.add_colorbar_outside(p, fig, ax[-2])
 
     alt2 = mars_shape_conics.region_separation(x, y, z, alt)
     c = mars_shape_conics.region_colors
