@@ -41,7 +41,7 @@ scpot_method =\
 
 def read(data_file, dataset_type="None",
          fields=None, spectra_type="eflux", lib='cdflib',
-         include_unit=True):
+         include_unit=True, source=('comp',)):
 
     """Returns SWEA data.
 
@@ -83,7 +83,7 @@ def read(data_file, dataset_type="None",
             dataset_type = "scpot"
 
     if dataset_type == "scpot":
-        return read_scpot(data_file, include_unit=include_unit)
+        return read_scpot(data_file, include_unit=include_unit, source=source)
 
     if not fields:
         if dataset_type == "spec":
