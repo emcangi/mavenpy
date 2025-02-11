@@ -239,7 +239,16 @@ def find_local_files(local_dir, kernel_group, kernel_name,
         kernel_name_split = kernel_name_split[:-1]
     subpath = (*subpath, *kernel_name_split)
 
-    local_dir_i = os.path.join(local_dir, *subpath)
+    if mirror_spedas_dir_tree:
+        local_dir_i = os.path.join(local_dir, *subpath)
+    else:
+        # 2/11/25: If not mirroring SPEDAS (which keeps
+        # generic_kernels separated from the MAVEN distribution)
+        # and instead pulling it into a specific folder containing
+        # all MAVEN-related kernels only identified by kernel type
+        # (e.g. spk, lsk), then only make a directory for that
+        # subtype and save everything there.
+        local_dir_i = os.path.join(local_dir, kernel_name_split[0])
     if verbose:
         print("Searching in:", local_dir_i)
 
