@@ -6,29 +6,52 @@ from matplotlib import pyplot as plt
 from mavenpy import anc, file_path
 
 
-# Search for the IDL data directory
-data_directory = file_path.get_IDL_data_dir()
-
 # If you don't use IDL or have that set,
 # replace this with the data directory you have
 # or want data saved in.
-# data_directory = "/Users/rjolitz/Desktop"
 
-_ = input("Data directory is '{}', continue?"
-          " (N or control-C to escape): ".format(data_directory))
+# Search for the IDL data directory
+spedas_data_directory = file_path.get_IDL_data_dir()
+spedas_data_directory = None
 
-if "n" in _.strip().lower():
-    sys.exit()
+if spedas_data_directory is None:
+    # If spedas env variable not found, prompt for kernel directory:
+    data_directory = input(
+        "No SPEDAS data directory found. Enter desired location of "
+        "spice kernels: ")
+
+    # Do you already have spice kernels downloaded
+    # in this folder the way SPEDAS saves them?
+    # (e.g. in /misc/spice/naif/MAVEN/kernels)?
+    # It will download according to this organization,
+    # mirroring NAIF / SSL.
+    mirror_spedas_dir_tree = input(
+        "Mirror SPEDAS kernel distribution? (y/n): ").lower().strip() == "y"
+
+else:
+    _ = input("Found SPEDAS data directory ('{}'), use this folder?"
+              " (y/n or control-C to escape): ".format(spedas_data_directory))
+
+    # If found but don't want to use, inquire again:
+    if "n" in _.strip().lower():
+        data_directory = input(
+            "Will not use that directory. Enter desired location of "
+            "spice kernels: ")
+        mirror_spedas_dir_tree = input(
+            "Mirror SPEDAS kernel distribution? (y/n): ").lower().strip() == "y"
+    else:
+        data_directory = spedas_data_directory
+        mirror_spedas_dir_tree = True
 
 
-# Do you already have spice kernels downloaded
-# in this folder the way SPEDAS saves them?
-# (e.g. in /misc/spice/naif/MAVEN/kernels)?
-# It will download according to this organization,
-# mirroring NAIF / SSL.
-# If you wish to download the files, set
-# the following variable to "True"
-download = False
+# Ask if download additional:
+download = input(
+    "Do you want to download kernels if not found "
+    "locally? (y/n) ").lower().strip() == "y"
+
+# By default, will ask before downloading any new files:
+prompt_for_download = input(
+    "Ask before download data? (y/n) ").lower().strip() == "y"
 
 # Can set verbose to True if want to
 # see process of loading:
@@ -49,7 +72,9 @@ from mavenpy import spice
 k = spice.load_kernels(
     data_directory,
     start_date=start_date, end_date=end_date,
-    download_if_not_available=False)
+    download_if_not_available=download,
+    mirror_spedas_dir_tree=mirror_spedas_dir_tree,
+    prompt_for_download=prompt_for_download)
 print("Loaded kernels.")
 
 print("List current kernels:")
