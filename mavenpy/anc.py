@@ -165,7 +165,10 @@ def read_spacecraft_ephemeris(data_directory, coordinate_system,
 def read_orbit_ephemeris(data_directory,
                          start_date=None, end_date=None, n_days=None,
                          only_over_timerange=None,
-                         fields=None, download_if_not_available=True):
+                         mirror_spedas_dir_tree=True,
+                         fields=None,
+                         download_if_not_available=True,
+                         prompt_for_download=True):
 
     """Return the MAVEN orbit numbers and periapse/apoapse times
     for a given duration in the mission
@@ -186,7 +189,8 @@ def read_orbit_ephemeris(data_directory,
         download_if_not_available=download_if_not_available,
         spk_ext='orb',
         use_most_recent=None,
-        mirror_spedas_dir_tree=True)
+        mirror_spedas_dir_tree=mirror_spedas_dir_tree,
+        prompt_for_download=prompt_for_download)
 
     if isinstance(paths, str):
         paths = [paths]
