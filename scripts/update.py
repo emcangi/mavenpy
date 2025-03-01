@@ -10,7 +10,7 @@ from mavenpy import file_path, retrieve, helper, specification, spice
 # Default datasets to retrieve
 default_datasets = {
     ("euv", "l3"): "minute",
-    ("iuv", "l1b"): "limb",
+    ("iuv", "l2"): "limb",
     ("lpw", "l2"): "lpnt",
     ("ngi", "l2"): "csn-abund-(.*)",
     ("pfp", "l0"): "all",
@@ -59,6 +59,7 @@ if __name__ == "__main__":
         "--dataset_name",
         help="Instrument data set name (e.g. 'csn-abund-*' for NGIMS L2, "
              "or 'c6-32e64m' for STATIC L2).",  nargs='*')
+    # Required keywords for MAG:
     parser.add_argument(
         "--mag_res",
         help="Resolution of MAG file downloaded (30sec, 1sec, full).")
@@ -68,6 +69,41 @@ if __name__ == "__main__":
         "--mag_coord",
         help="Coordinate system of MAG file downloaded "
              "(GEO = pc, MSO = ss, PL = pl).")
+    # Required keywords for IUVS
+    parser.add_argument(
+        "--orbit_segment", default='periapse',
+        help="Orbit segment of to-be-downloaded IUVS observation.")
+    parser.add_argument(
+        "--imaging_mode", default='',
+        help="Imaging mode of to-be-downloaded IUVS observation.")
+    # Keywords for Spice access
+    parser.add_argument(
+        "--sc_position",
+        help="Get Spice kernels for determining spacecraft position,"
+             " defaults to True.",
+        action='store_true',
+        default=True)
+    parser.add_argument(
+        "--sc_pointing",
+        help="Get Spice kernels for determining spacecraft pointing "
+             "(can be skipped if not intending to do vector transforms)."
+             "WARNING: there are a LOT of s/c pointing files, "
+             "only set this if you need 'em because they will need "
+             "a lot of download time.",
+        action='store_true')
+    parser.add_argument(
+        "--app_pointing",
+        help="Get Spice kernels for determining APP pointing "
+             "(can be skipped if not intending to do vector transforms)."
+             "WARNING: there are a LOT of APP pointing files, "
+             "only set this if you need 'em because they will need "
+             "a lot of download time.",
+        action='store_true')
+    parser.add_argument(
+        "--prompt_for_spice_download",
+        help="Raises a prompt for downloading Spice kernels, if desired.",
+        action='store_true')
+
 
     # Keyword to include print statements
     parser.add_argument(
@@ -83,9 +119,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--remote", help="Remote to download data from (default: ssl_sprg).",
         default="ssl_sprg")
+
+    parser.add_argument(
+        "--no_mirror",
+        help="Boolean to disable mirroring of a remote directory tree."
+             " If this is included in the commandline, will save all "
+             "files to folder regardless of structure.",
+        action="store_true")
+
     parser.add_argument(
         "--local_source_tree",
-        help="Directory tree of remote that is mirrored on local.",
+        help="Name of remote to mirror or the way the"
+             " local tree is already mirrored. Assumes ssl_sprg by default,"
+             " can be lasp_sdc_public, lasp_sdc_team, or empty.",
         default="ssl_sprg")
     parser.add_argument("--username", help="Username for data download.")
     parser.add_argument("--password", help="Password for data download.")
@@ -113,6 +159,7 @@ if __name__ == "__main__":
     remote_info =\
         {"source": args.remote, "username": username,
          "password": password,
+         "mirror_remote_tree": not args.no_mirror,
          "mirrored_local_source_tree": args.local_source_tree}
 
     # If data directory not provided, pull from the IDL cshrc if not defined
@@ -121,22 +168,21 @@ if __name__ == "__main__":
     else:
         data_directory = args.data_directory
 
-    # Update the default MAG parameters if provided
-    res, ext, coord = args.mag_res, args.mag_ext, args.mag_coord
-    if (res and ext) and coord:
-        default_mag = {"ext": ext, "coord": coord, "res": res}
-
     if args.spice:
-        kernels = ('pck', 'lsk', 'spk_planets', "spk_satellites_mars",
-                   'fk', 'sclk', 'ck_sc', 'spk', 'ik')
-        kernel_groups = ["generic_kernels"]*4 + ["maven"]*5
-        k = spice.MAVEN_kernels(
-            data_directory, kernels, kernel_groups,
-            start_dt=start_utc, end_dt=end_utc,
-            download_if_not_available=True,
-            mirror_spedas_dir_tree=args.local_source_tree,
-            verbose=args.verbose)
+        mirror_spedas_dir_tree =\
+            (args.local_source_tree == "ssl_sprg" and not args.no_mirror)
 
+        k = spice.load_kernels(
+            data_directory,
+            start_date=start_utc, end_date=end_utc,
+            n_days=n_days,
+            download_if_not_available=True,
+            load_spacecraft=args.sc_position,
+            load_spacecraft_pointing=args.sc_pointing,
+            load_APP=args.app_pointing,
+            mirror_spedas_dir_tree=mirror_spedas_dir_tree,
+            verbose=args.verbose,
+            prompt_for_download=args.prompt_for_spice_download)
 
     # Check if instrument available:
     if args.instrument:
@@ -162,11 +208,18 @@ if __name__ == "__main__":
             # Get the datasets available:
             dataset_params = {"level": level_i}
             if tla_i == "mag":
+                # Update the default MAG parameters if provided
+                res, ext, coord = args.mag_res, args.mag_ext, args.mag_coord
+                if (res and ext) and coord:
+                    default_mag = {"ext": ext, "coord": coord, "res": res}
                 dataset_params.update(default_mag)
             else:
+                if tla_i == "iuv":
+                    default_iuv = {"orbit_segment": args.orbit_segment,
+                                   "imaging_mode": args.imaging_mode}
+                    dataset_params.update(default_iuv)
                 available_datasets = format_i["datasets"][level_i]
                 available_ext = format_i["ext"]
-                print(available_ext)
 
                 if isinstance(available_ext, str):
                     ext_i = available_ext
