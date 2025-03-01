@@ -79,6 +79,7 @@ def local_file_names(local_dir, instrument,
                      start_date=None, end_date=None, orbnum=None, n_days=None,
                      orb_to_t_func=None,
                      level="l2", dataset_name="", ext="", coord="", res="",
+                     orbit_segment="", imaging_mode="",
                      mirror_remote_tree=True, source="ssl_sprg",
                      skip_missing_data=True):
 
@@ -97,7 +98,9 @@ def local_file_names(local_dir, instrument,
     # See if the requested dataset exists:
     specification.check_if_dataset_exist(
         instrument, level=level, ext=ext,
-        dataset=dataset_name, coord=coord, res=res)
+        dataset=dataset_name, coord=coord, res=res,
+        orbit_segment=orbit_segment, imaging_mode=imaging_mode,
+        orbit_num=orbnum)
 
     # Get the TLA for the instrument
     tla = instrument[:3].lower()
@@ -148,7 +151,9 @@ def local_file_names(local_dir, instrument,
     # input()
     filename_regex = specification.filename(
         tla, level=level, dataset_name=dataset_name, ext=ext,
-        coord=coord, res=res)
+        coord=coord, res=res,
+        orbit_segment=orbit_segment, imaging_mode=imaging_mode,
+        orbit_num=orbnum)
     # print(filename_regex)
     filepath_regex = os.path.join(local_path_fstring, filename_regex)
     # print(filepath_regex)
