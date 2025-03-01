@@ -29,7 +29,6 @@ remote_options = ("lasp_sdc_team", "lasp_sdc_public", "ssl_sprg")
 file_per_orbit = ("ngi", "iuv", "acc")
 file_per_day = ("swe", "swi", "sep", "euv", "sta", "mag", "lpw", "pfp")
 
-
 # Available instruments + levels + formats:
 formats = {}
 
@@ -59,15 +58,43 @@ formats["euv"]["source"] =\
 
 # IUVS
 formats["iuv"] = {}
-formats["iuv"]["level"] = ("l1c", "l2")
+formats["iuv"]["level"] = ("l1b", "l1c", "l2")
 formats["iuv"]["ext"] = "fits.gz"
 formats["iuv"]["datasets"] =\
-    {"l1c": ("corona", "disk", "echelle", "limb", "occultation"),
+    {"l1b": ("corona", "disk", "echelle", "limb", "occultation"),
+     "l1c": ("corona", "disk", "echelle", "limb", "occultation"),
      "l2": ("corona", "disk", "limb", "occultation")}
 formats["iuv"]["source"] =\
-    {"l1c": ("ssl_sprg", "lasp_sdc_team", "lasp_sdc_public"),
+    {"l1b": ("ssl_sprg", "lasp_sdc_team", "lasp_sdc_public"),
+     "l1c": ("ssl_sprg", "lasp_sdc_team", "lasp_sdc_public"),
      "l2": ("ssl_sprg", "lasp_sdc_team", "lasp_sdc_public")}
+iuvs_filename_wimagingmode = "{orbit_segment}-orbit{orbit_num}-{imaging_mode}"
+iuvs_filename = "{orbit_segment}-orbit{orbit_num}"
+formats["iuv"]["mode"] =\
+    {"corona": {"l1b": ("fuv", "muv"), "l1c": "fuv", "l2": "fuv"},
+     "disk": {"l1b": ("fuv", "muv"), "l2": ("fuv", "muv", "")},
+     "limb": {"l1b": ("fuv", "muv"), "l1c": "", "l2": ""},
+     "echelle": {"l1b": "ech", "l1c": "ech"},
+     "occultation": {"l1b": ("fuv", "muv"), "l1c": "", "l2": ""}}
 
+# level_ds = (level, ds_name)
+# if level_ds in iuvs_imaging_modes:
+
+formats["iuv"]["segment"] =\
+    {"corona":
+        {"l1b": ("incorona", "inbound", "inspace",
+                 "outbound", "outboundhifi", "outcorona", "outcoronahifi"),
+         "l1c": "corona", "l2": "corona"},
+     "disk":
+        {"l1b": ("apoapse", "outdisk"), "l1c": "apoapse", "l2": "apoapse"},
+     "limb":
+        {"l1b": ("outlimb", "inlimb", "periapse"),
+         "l1c": ("outlimb", "inlimb", "periapse"),
+         "l2": "periapse"},
+     "echelle":
+        ("indisk", "inlimb", "inbound",
+         "outcorona", "outdisk", "outlimb",
+         "periapse", "relay-echelle")}
 
 # LPW
 formats["lpw"] = {}
@@ -358,7 +385,8 @@ def path(instrument_tla, level, ext="", dataset_name="", res=""):
 
 
 def filename(instrument_tla, level="2", dataset_name=None, ext=None,
-             coord=None, res=None):
+             coord=None, res=None,
+             orbit_segment=None, imaging_mode=None, orbit_num=None):
     """Return the name of a MAVEN instrument datafile.
 
     instrument_tla: string, name of requested instrument data,
@@ -367,7 +395,11 @@ def filename(instrument_tla, level="2", dataset_name=None, ext=None,
     dataset_name: string, name of requested dataset
     coord: string, coord system of requested filename, reqd
         for MAG and monthly ephemeris
-    res: string, interval of requested filename, reqd for MAG"""
+    res: string, interval of requested filename, reqd for MAG
+    orbit_segment: string, orbit scan type, reqd for IUVS, e.g. 'periapse'
+    imaging_mode: string, wavelength range of IUVS scan, e.g. 'fuv',
+        reqd for IUVS L1b/c
+    """
 
     if instrument_tla == "mag":
         # Need ext, res, and coord to make filename
@@ -407,6 +439,43 @@ def filename(instrument_tla, level="2", dataset_name=None, ext=None,
         if res:
             res = "_{}".format(res)
         data_name = sta_l3_name.format(short_name=short, res=res, ext=ext)
+
+    elif instrument_tla == 'iuv':
+        # Filename for IUVS requires orbit number and orbit segment,
+        # and sometimes the imaging mode:
+        if not orbit_num:
+            # if no orbit number provided, set to * for matching any
+            orbit_num = "(.*)"
+        else:
+            # Pad the string up to 5 sigfigs with zeroes
+            orbit_num = str(orbit_num).zfill(5)
+
+        if not orbit_segment:
+            raise IOError(
+                "Need to define a imaging mode, orbit segment, "
+                "and orbit_num to construct IUVS filename.\n"
+                "(run specification.check_if_dataset_exist to confirm"
+                "exist)")
+
+        # if the imaging mode is an empty string,
+        # do not format a string without it:
+        if not imaging_mode:
+            dataset_name = iuvs_filename.format(
+                orbit_segment=orbit_segment, orbit_num=orbit_num)
+        else:
+            dataset_name = iuvs_filename_wimagingmode.format(
+                orbit_segment=orbit_segment,
+                imaging_mode=imaging_mode[:3],
+                orbit_num=orbit_num)
+
+        data_name = hourly_name.format(
+            tla=instrument_tla, level=level,
+            dataset_name=dataset_name, ext=ext)
+
+        # ex:
+        # - mvn_iuv_l1b_inlimb-orbit20114-fuv_20231201T191834_v13_r01.fits.gz
+        # - mvn_iuv_l1c_inlimb-orbit20114_20231201T191834_v13_r01.fits.gz
+        # - mvn_iuv_l2_periapse-orbit20153_20231207T143256_v13_r01.fits.gz
 
     elif instrument_tla in file_per_orbit:
         data_name = hourly_name.format(
@@ -533,7 +602,8 @@ def missing_dataset_error_message(name, level, ext, datasets, dataset=''):
 
 
 def check_if_dataset_exist(instrument, ext="", level="", dataset="",
-                           coord="", res=""):
+                           coord="", res="",
+                           orbit_segment="", imaging_mode="", orbit_num=""):
 
     tla = instrument[:3].lower()
     NAME = instrument.upper()
@@ -650,7 +720,7 @@ def check_if_dataset_exist(instrument, ext="", level="", dataset="",
                     " '{format}', use '{formats} instead'".format(
                         NAME=NAME, level=level,
                         format=ext, formats=exts))
-
+    # MAG:
     if tla == "mag":
         # print("MAG check")
         # Check if cadence exists for MAG level and extension
@@ -695,3 +765,57 @@ def check_if_dataset_exist(instrument, ext="", level="", dataset="",
                 "{available_coords}".format(
                     level=level, ext=ext, res=res,
                     coord=coord, available_coords=available_coords))
+
+    # For IUVS, need to check if an orbit segment is given,
+    # and if it is, if it is included for the requested dataset
+    if tla == "iuv":
+        modes = formats["iuv"]["mode"]
+        segments = formats["iuv"]["segment"]
+
+        # Raise error if dataset info not inside:
+        if dataset not in modes:
+            raise IOError(
+                "No defined image modes (e.g. '', 'muv', 'fuv') "
+                "for dataset '{}'.".format(dataset))
+        if dataset not in segments:
+            raise IOError(
+                "No defined orbit segments (e.g. 'inlimb') "
+                "for dataset '{}'.".format(dataset))
+
+        # Now get the known modes / orbit segments for the dataset:
+        modes_ds = modes[dataset]
+        segments_ds = segments[dataset]
+
+        # Check if level in the modes, and subselect those modes:
+        if isinstance(modes_ds, dict):
+            if level not in modes_ds:
+                raise IOError(
+                    "No imaging mode description of level '{}' "
+                    "for dataset '{}', try instead: {}".format(
+                        level, dataset, modes_ds.keys()))
+            modes_ds = modes_ds[level]
+        if isinstance(segments_ds, dict):
+            if level not in segments_ds:
+                raise IOError(
+                    "No orbit segment description of level '{}' "
+                    "for dataset '{}', try instead: {}".format(
+                        level, dataset, segments_ds.keys()))
+            segments_ds = segments_ds[level]
+
+        # Now check if the imaging mode & orbit segment in those datasets:
+        if isinstance(modes_ds, tuple):
+            mode_unavailable = (imaging_mode not in modes_ds)
+        else:
+            mode_unavailable = (modes_ds != imaging_mode)
+        if mode_unavailable:
+            raise IOError(
+                "No imaging mode '{}' for dataset '{}', "
+                "try instead: {}".format(imaging_mode, dataset, modes_ds))
+        if isinstance(segments_ds, tuple):
+            segment_unavailable = (orbit_segment not in segments_ds)
+        else:
+            segment_unavailable = (segments_ds != orbit_segment)
+        if segment_unavailable:
+            raise IOError(
+                "No orbit segment '{}' for dataset '{}', "
+                "try instead: {}".format(orbit_segment, dataset, segments_ds))
