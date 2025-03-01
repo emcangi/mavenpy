@@ -106,10 +106,12 @@ def fix_filename_version(filename, v_number=None, r_number=None):
 
 
 def sdc_retrieve(instrument, destination_dir='',
+                 mirror_remote_tree=True,
                  mirrored_local_source_tree="ssl_sprg",
                  start_date=None, end_date=None, orbnum=None, n_days=None,
                  orb_to_t_func=None,
                  level="l2", dataset_name="", ext="", res="", coord="",
+                 orbit_segment="", imaging_mode="",
                  source="ssl_sprg", username="", password="",
                  v_number=None, r_number=None,
                  verbose=None,
@@ -157,7 +159,7 @@ def sdc_retrieve(instrument, destination_dir='',
     # we want to save to a location consistent with that.
     # By default, assumes the ssl_sprg structure. If set to '',
     # assume all files saved direct to destination_dir.
-    if mirrored_local_source_tree:
+    if mirror_remote_tree:
         local_source_folder_root = specification.remote_base_directory(
             mirrored_local_source_tree)
 
@@ -172,6 +174,8 @@ def sdc_retrieve(instrument, destination_dir='',
                 sys.exit("Unable to save data without directory.")
 
         destination_dir = local_root_dir
+    else:
+        local_root_dir = destination_dir
 
     # Get the TLA for the instrument
     tla = instrument[:3].lower()
@@ -189,7 +193,9 @@ def sdc_retrieve(instrument, destination_dir='',
         # See if the requested dataset exists
         specification.check_if_dataset_exist(
             instrument, level=level, ext=ext,
-            dataset=d_name, coord=coord, res=res)
+            dataset=d_name, coord=coord, res=res,
+            orbit_segment=orbit_segment, imaging_mode=imaging_mode,
+            orbit_num=orbnum)
 
         # And see if it is available on this remote
         specification.check_if_dataset_on_remote(
@@ -202,7 +208,9 @@ def sdc_retrieve(instrument, destination_dir='',
             tla, level, ext=ext, res=res, dataset_name=d_name)
         filename_regex = specification.filename(
             tla, level=level, dataset_name=d_name, ext=ext,
-            coord=coord, res=res)
+            coord=coord, res=res,
+            orbit_segment=orbit_segment, imaging_mode=imaging_mode,
+            orbit_num=orbnum)
         # print("/".join(filedir_tuple))
 
         # If supply the version & revision, replace in line:
