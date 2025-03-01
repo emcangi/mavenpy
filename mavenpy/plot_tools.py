@@ -76,3 +76,21 @@ def format_xaxis(ax, start_date, end_date):
     # fig.autofmt_xdate()
     ax.set_xlim(start_dt, end_dt + dt.timedelta(days=1))
     # ax.set_xticklabels(ax.get_xticklabels(), rotation=30, ha='right')
+
+
+def legend_sidetext(fig, ax, labels, label_colors):
+
+    # Invert the list since we're stacking from bottom-to-top
+    labels = labels[::-1]
+    label_colors = label_colors[::-1]
+
+    # bbox contains the
+    # [x0 (left), y0 (bottom), x1 (right), y1 (top)] of the axis.
+    bbox = ax.get_position()
+    dy = bbox.height
+    n_labels = len(labels)
+    dy_i = dy/n_labels
+
+    for j, (l_i, c_i) in enumerate(zip(labels, label_colors)):
+        fig.text(bbox.x1 + 0.01, bbox.y0 + dy_i*(j + 0.5),
+                 l_i, va='center', color=c_i)
