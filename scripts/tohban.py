@@ -366,13 +366,15 @@ if __name__ == "__main__":
 
     if "tplot_names" in plot_info_keys:
         tplot_names = plot_info["tplot_order"]
-        # LPW IV data is always prelogged:
-        plot_info["mvn_lpw_iv"]["zscale"] = 'linear'
-        plot_info["mvn_lpw_iv"]["yscale"] = 'linear'
 
     else:
         tplot_names = ['mvn_sep1f_ion_eflux', 'mvn_sep1r_ion_eflux', 'mvn_sep1f_elec_eflux', 'mvn_sep1r_elec_eflux', 'mvn_sta_c0_e', 'mvn_sta_c6_m', 'mvn_swis_en_eflux', 'mvn_swe_etspec', 'mvn_lpw_iv', 'mvn_mag_bamp', 'mvn_mag_bang_1sec', 'alt2', 'burst_flag']
     print(tplot_names)
+
+    # LPW IV data is always prelogged:
+    plot_info["mvn_lpw_iv"]["zscale"] = 'linear'
+    plot_info["mvn_lpw_iv"]["yscale"] = 'linear'
+
     # input()
 
     if n_days and not end:
@@ -422,15 +424,13 @@ if __name__ == "__main__":
                 download_if_not_available=dl_kernels,
                 verbose=False,
                 prompt_for_download=False)
-            print("Kernels loaded.")
-            input()
+            input("Kernels loaded, hit return to continue:")
 
             eph = anc.read_orbit_ephemeris(
                 args.data_directory,
                 start_date=start, end_date=end, n_days=n_days,
                 download_if_not_available=dl_kernels)
-            print("Loaded ephemeris.")
-            input()
+            input("Loaded ephemeris, hit return to continue:")
 
             sc_time_utc = helper.make_dt_range(
                 start, end_date=end, n_days=n_days,
