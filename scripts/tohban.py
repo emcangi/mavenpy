@@ -2,6 +2,7 @@ import sys
 import os
 import argparse
 import datetime as dt
+import re
 
 import requests
 from dateutil.parser import parse
@@ -318,6 +319,14 @@ if __name__ == "__main__":
              " e.g. solar wind, sheath, pileup.",
         action='store_true')
 
+    # Keyword to exclude certain datasets (useful for ignoring panels
+    # if nothing interesting for further analysis, such as SEPs during a quiet
+    # period).
+    parser.add_argument(
+        "--exclude",
+        help="Instrument datasets to ignore, e.g. 'sep' or 'sep sta'.",
+        type=str, nargs="+", default=())
+
     # Keyword to include print statements
     parser.add_argument(
         "--verbose", help="Enable print statements to help debugging.",
@@ -361,8 +370,8 @@ if __name__ == "__main__":
         print("Exiting, no datafiles / data to show.")
         sys.exit()
 
-    print(plot_info_keys)
-    print(data_keys)
+    # print(plot_info_keys)
+    # print(data_keys)
 
     if "tplot_names" in plot_info_keys:
         tplot_names = plot_info["tplot_order"]
@@ -370,6 +379,9 @@ if __name__ == "__main__":
     else:
         tplot_names = ['mvn_sep1f_ion_eflux', 'mvn_sep1r_ion_eflux', 'mvn_sep1f_elec_eflux', 'mvn_sep1r_elec_eflux', 'mvn_sta_c0_e', 'mvn_sta_c6_m', 'mvn_swis_en_eflux', 'mvn_swe_etspec', 'mvn_lpw_iv', 'mvn_mag_bamp', 'mvn_mag_bang_1sec', 'alt2', 'burst_flag']
     print(tplot_names)
+
+    for excl in args.exclude:
+        tplot_names = [i for i in tplot_names if i.find(excl) == -1]
 
     # LPW IV data is always prelogged:
     plot_info["mvn_lpw_iv"]["zscale"] = 'linear'
@@ -454,6 +466,23 @@ if __name__ == "__main__":
             continue
 
         data_i = data[plot_name_i]
+
+        if plot_name_i == "mvn_sta_c0_e":
+            # For some reason the time axis for the MAVEN STATIC
+            # energy spectra will reset to the start of the day
+            # when a data gap starts, leading to peculiar overplotting.
+            # To address this, best to identify where the reset occurs
+            # and exclude all data after that point.
+
+            t = data_i['time_unix']
+            delta_t = np.ediff1d(t, to_end=t[-2] - t[-1])
+            any_neg_time = np.where(delta_t < 0)[0]
+
+            if len(any_neg_time) > 0:
+                cutoff = any_neg_time[0]
+                data_i['time_unix'] = (data_i['time_unix'])[:cutoff]
+                data_i['y'] = (data_i['y'])[:, :cutoff]
+                data_i['z'] = (data_i['z'])[:, :cutoff]
 
         if isinstance(data_i, list):
 
