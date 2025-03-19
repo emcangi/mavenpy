@@ -792,9 +792,11 @@ def download_file(file_url, local_filename, session=None,
     progress_bar = Spinner(size_kb, 'kb')
     tot_i = 0
 
+    temp_filename = "{}.part".format(local_filename)
+
     try:
         with req.get(file_url, stream=True, auth=auth) as r:
-            with open(local_filename, 'wb') as f:
+            with open(temp_filename, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=chunk_size):
 
                     # Write:
@@ -806,10 +808,12 @@ def download_file(file_url, local_filename, session=None,
                     if tot_i > size_kb:
                         tot_i = size_kb
                     progress_bar.increment(int(tot_i))
-    except KeyboardInterrupt:
-        os.remove(local_filename)
+    except:
+        os.remove(temp_filename)
         sys.exit()
 
+    # Rename the temp file:
+    os.rename(temp_filename, local_filename)
     print("\nDone.")
 
     return
