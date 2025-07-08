@@ -456,6 +456,10 @@ def filename(instrument_tla, level="2", dataset_name=None, ext=None,
                 "and orbit_num to construct IUVS filename.\n"
                 "(run specification.check_if_dataset_exist to confirm"
                 "exist)")
+        else:
+            if isinstance(orbit_segment, tuple):
+                orbit_segment_str = "|".join(orbit_segment)
+                orbit_segment = "({})".format(orbit_segment_str)
 
         # if the imaging mode is an empty string,
         # do not format a string without it:
@@ -811,10 +815,18 @@ def check_if_dataset_exist(instrument, ext="", level="", dataset="",
             raise IOError(
                 "No imaging mode '{}' for dataset '{}', "
                 "try instead: {}".format(imaging_mode, dataset, modes_ds))
-        if isinstance(segments_ds, tuple):
-            segment_unavailable = (orbit_segment not in segments_ds)
+        print(segments_ds)
+        if isinstance(orbit_segment, tuple):
+            # if any of the orbit segments requested in the segments
+            # available for the given dataset
+            segment_unavailable = any(
+                [i not in segments_ds for i in orbit_segment])
         else:
-            segment_unavailable = (segments_ds != orbit_segment)
+            if isinstance(segments_ds, tuple):
+                segment_unavailable = (orbit_segment not in segments_ds)
+            else:
+                segment_unavailable = (segments_ds != orbit_segment)
+
         if segment_unavailable:
             raise IOError(
                 "No orbit segment '{}' for dataset '{}', "
