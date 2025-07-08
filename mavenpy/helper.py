@@ -190,7 +190,20 @@ def UTC_to_UNX(UTC_time):
     # If supplied as np.datetime64, convert to datetime obj:
     if isinstance(UTC_time, np.datetime64):
         # UTC_time = UTC_time.tolist()
-        UTC_time = UTC_time.astype(dt.datetime)
+        # PROBLEM: astype sometimes returns a nonsense value, usually an integer,
+        # so do a str parse to work around
+        UTC_time_asdt = UTC_time.astype(dt.datetime)
+        if isinstance(UTC_time_asdt, int):
+            UTC_time_asstr = np.datetime_as_string(UTC_time)
+            # Ex: 2023-12-08T00:00:02.431755776
+            # cut off any sub-microsecond precision:
+            UTC_time_asdt = dt.datetime.strptime(
+                UTC_time_asstr[:26], "%Y-%m-%dT%H:%M:%S.%f")
+            # print(UTC_time_asdt)
+
+        UTC_time = UTC_time_asdt
+
+
     # print(UTC_time)
 
     if UTC_time.tzinfo is None:
