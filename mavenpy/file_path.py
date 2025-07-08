@@ -54,7 +54,7 @@ def get_IDL_data_dir():
     return None
 
 
-def regroup(paths):
+def regroup(paths, instrument_tla='v'):
 
     '''Split a list of filenames into lists of distinct
     orbit names with different versions, e.g. NGIMS'''
@@ -64,7 +64,10 @@ def regroup(paths):
 
     for p in paths:
         filename = os.path.split(p)[1]
-        distinct_filename = re.split("v[0-9]", filename)[0]
+        if instrument_tla == 'ngi':
+            distinct_filename = (filename.split("_"))[3]
+        else:
+            distinct_filename = re.split("v[0-9]", filename)[0]
 
         if distinct_filename in groupings:
             groupings[distinct_filename].append(p)
@@ -213,7 +216,8 @@ def local_file_names(local_dir, instrument,
 
             # Split into groups of samefile name up to the version #
             # for multiple orbits in a day
-            keyorder, distinct_filegroup_dict = regroup(matching_files)
+            keyorder, distinct_filegroup_dict = regroup(
+                matching_files, instrument_tla=tla)
 
             for filegroup in keyorder:
                 matching_files_i = distinct_filegroup_dict[filegroup]
