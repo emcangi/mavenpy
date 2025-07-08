@@ -179,7 +179,22 @@ def sound_speed(Tp_eV, Te_eV, proton_alpha_ratio=0, THe_eV=0):
     gamma = 5/3  # N + 2 / N for N = 3 degrees of freedom
 
     T_J = (Tp_eV + Te_eV + proton_alpha_ratio*THe_eV) * eV_to_joules
-    m_kg = proton_mass + electron_mass + proton_alpha_ratio*mass_kg_dict["He"]
+    # m_kg = proton_mass + electron_mass * (Te_eV != 0) + proton_alpha_ratio*mass_kg_dict["He"] * (THe_eV != 0)
+    m_kg = proton_mass
+
+    if isinstance(Te_eV, Iterable):
+        if all(Te_eV) != 0:
+            m_kg += electron_mass
+    else:
+        if Te_eV != 0:
+            m_kg += electron_mass
+
+    if isinstance(THe_eV, Iterable):
+        if all(THe_eV) != 0:
+            m_kg = proton_alpha_ratio*mass_kg_dict["He"] + m_kg
+    else:
+        if THe_eV != 0:
+            m_kg = proton_alpha_ratio*mass_kg_dict["He"] + m_kg
 
     v_sound_m2s2 = gamma * T_J / m_kg
 
