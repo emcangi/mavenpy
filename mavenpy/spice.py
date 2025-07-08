@@ -1,6 +1,5 @@
 import os
 import datetime as dt
-import glob
 import re
 from collections.abc import Iterable
 
@@ -61,7 +60,7 @@ generic_kernel_file_fmt = {
     "pck": 'pck0001[0-9].tpc',
     "lsk": 'naif001[0-9].tls',
     "spk_planets": 'de430.bsp',
-    "spk_satellites_mars": 'mar097.bsp',
+    "spk_satellites_mars": 'mar[0-9][0-9][0-9].bsp',
     "spk_satellites_jupiter": 'jup3[0-9][0-9].bsp',
     "spk_satellites_saturn": 'sat428.bsp'
 }
@@ -584,6 +583,7 @@ def retrieve_kernels(data_directory, kernel_group, kernel_name,
                  if j in local_filenames]
 
         if verbose:
+            print("Searching on remote: ", remote_url)
             print('remote names: ', remote_filename_ij)
             print('remote dt: ', remote_filename_modtime_dt)
             print('local names: ', local_filenames)
@@ -708,23 +708,8 @@ def spk_file_names(start_time_dt, end_time_dt, file_fmt, ext):
         if i > 0:
             dt_i = dt_f
             dt_f = dt_f + relativedelta(months=3)
-
-        if dt_f > (present_date_dt - dt.timedelta(days=40)):
-            # if dt_i >= present_date_dt:
-            # Predictions for MAVEN orbit starting
-            # from latest ephemeris window.
-            file_i = file_fmt["predict"].format(ext=ext)
-
-            # If orbits are retrieved within the last few months,
-            # need to use maven_orb_rec.orb
-            # It can take over 40 days for the new quarterly file
-            # to be written:
-            # file_i = file_fmt["recent"].format(ext=ext)
-            files.append(file_fmt["recent"].format(ext=ext))
-
         else:
             # print(dt_i, dt_f)
-
             # Orbit ephemeris (saved in the Spice kernels)
             # ALERT: Currently only "v1" files present,
             # but will need to be modified if v[1-9]
@@ -735,6 +720,19 @@ def spk_file_names(start_time_dt, end_time_dt, file_fmt, ext):
                     ext=ext)
             # print(file_i)
         files.append(file_i)
+
+    if dt_f > (present_date_dt - dt.timedelta(days=40)):
+        # if dt_i >= present_date_dt:
+        # Predictions for MAVEN orbit starting
+        # from latest ephemeris window.
+        file_i = file_fmt["predict"].format(ext=ext)
+
+        # If orbits are retrieved within the last few months,
+        # need to use maven_orb_rec.orb
+        # It can take over 40 days for the new quarterly file
+        # to be written:
+        # file_i = file_fmt["recent"].format(ext=ext)
+        files.append(file_fmt["recent"].format(ext=ext))
 
     # print(files)
     # input()
