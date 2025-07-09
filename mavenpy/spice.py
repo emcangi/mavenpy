@@ -837,12 +837,14 @@ def MAVEN_kernels(data_directory, kernels, kernel_groups,
             print("Getting {} files ({})...".format(
                 k_i, expanded_kernel_name[k_i]))
 
-        use_most_recent = (k_i not in ('spk_planets', "spk_satellites_mars"))
+        # Disabling this definition of use_most_recent,
+        # since these kernels can and do get updated:
+        # use_most_recent = (k_i not in ('spk_planets', "spk_satellites_mars"))
 
         kernel_filepath_i = retrieve_kernels(
             data_directory, kg_i, k_i,
             download_if_not_available=download_if_not_available,
-            use_most_recent=use_most_recent,
+            use_most_recent=True,
             session=session,
             start_date=start_dt, end_date=end_dt,
             verbose=verbose,
