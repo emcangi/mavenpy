@@ -59,10 +59,10 @@ ck_5day_recent_file_format =\
 generic_kernel_file_fmt = {
     "pck": 'pck0001[0-9].tpc',
     "lsk": 'naif001[0-9].tls',
-    "spk_planets": 'de430.bsp',
+    "spk_planets": 'de4[0-9][0-9].bsp',
     "spk_satellites_mars": 'mar[0-9][0-9][0-9].bsp',
     "spk_satellites_jupiter": 'jup3[0-9][0-9].bsp',
-    "spk_satellites_saturn": 'sat428.bsp'
+    "spk_satellites_saturn": 'sat4[0-9][0-9].bsp'
 }
 
 # There is one FK MAVEN file ONLY in the tplot software (maven_misc.tf)
@@ -699,6 +699,7 @@ def spk_file_names(start_time_dt, end_time_dt, file_fmt, ext):
     dt_i, dt_f = dt_range_i
     # print(dt_f)
     # print(dt_i)
+    # print(n_files)
     # input()
 
     present_date_dt = dt.datetime.now()
@@ -708,17 +709,17 @@ def spk_file_names(start_time_dt, end_time_dt, file_fmt, ext):
         if i > 0:
             dt_i = dt_f
             dt_f = dt_f + relativedelta(months=3)
-        else:
-            # print(dt_i, dt_f)
-            # Orbit ephemeris (saved in the Spice kernels)
-            # ALERT: Currently only "v1" files present,
-            # but will need to be modified if v[1-9]
-            # files are created!
-            file_i = file_fmt["quarterly"].format(
-                    yymmdd_i=dt_i.strftime("%y%m%d"),
-                    yymmdd_f=dt_f.strftime("%y%m%d"),
-                    ext=ext)
-            # print(file_i)
+
+        # print(dt_i, dt_f)
+        # Orbit ephemeris (saved in the Spice kernels)
+        # ALERT: Currently only "v1" files present,
+        # but will need to be modified if v[1-9]
+        # files are created!
+        file_i = file_fmt["quarterly"].format(
+                yymmdd_i=dt_i.strftime("%y%m%d"),
+                yymmdd_f=dt_f.strftime("%y%m%d"),
+                ext=ext)
+        # print(file_i)
         files.append(file_i)
 
     if dt_f > (present_date_dt - dt.timedelta(days=40)):
@@ -726,6 +727,7 @@ def spk_file_names(start_time_dt, end_time_dt, file_fmt, ext):
         # Predictions for MAVEN orbit starting
         # from latest ephemeris window.
         file_i = file_fmt["predict"].format(ext=ext)
+        files.append(file_i)
 
         # If orbits are retrieved within the last few months,
         # need to use maven_orb_rec.orb
@@ -734,7 +736,7 @@ def spk_file_names(start_time_dt, end_time_dt, file_fmt, ext):
         # file_i = file_fmt["recent"].format(ext=ext)
         files.append(file_fmt["recent"].format(ext=ext))
 
-    # print(files)
+    # print('SPK filenames:', files)
     # input()
 
     return files
